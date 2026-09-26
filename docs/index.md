@@ -25,15 +25,14 @@ features:
 ---
 
 <!-- markdownlint-disable-next-line MD041 -- the hero above is the title -->
-## How it works
+## Quick start
 
-```text
-~/work                -> work       (your work account)
-~/work/side-project   -> personal   (an override for one folder)
-~/personal            -> personal
-~/other               -> asks once, then remembers
-```
+1. Install with the command above. It also adds `csw`, a short name for
+   `claude-account`.
+2. Run `csw setup`: name the account you are logged in to, add your other
+   accounts, and map your folders.
+3. Run `claude` in any project. It uses that folder's account, and asks once
+   in a folder that has none.
 
-Install with the command above, then run `claude-account setup`: it names the
-login you already have, adds your other accounts and maps your folders. From
-then on, `claude` picks the account on its own. [Read the guide](/guide).
+Switch a project later with `csw`. [Read the guide](/guide) for daily use, or
+[how it works](/how-it-works) for the details.

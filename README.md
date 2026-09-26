@@ -1,7 +1,35 @@
 # Claude Account Switcher
 
-`claude-account` runs several Claude Code accounts on one machine and lets each
-folder decide which one `claude` uses.
+Keep your Claude Code accounts apart, for work, personal or a side project, and
+let each folder decide which one `claude` uses. Every account stays logged in;
+you never `/logout` and `/login` again.
+
+> Unix-like systems only (macOS, Linux; Windows through WSL). **Tested on macOS.**
+>
+> Docs: <https://switcher.diananerd.com>
+
+## Install
+
+```sh
+curl -fsSL https://switcher.diananerd.com | sh
+```
+
+It shows what it will change and asks first. It also adds **`csw`**, a short
+name for the `claude-account` command; the examples below use it.
+
+## Set up
+
+```sh
+csw setup
+```
+
+Short steps: name the account Claude Code is already logged in to, add your
+other accounts (each logs in once in the browser), pick the default, and map
+your folders, for example `~/work` to your work account.
+
+## Use
+
+Run `claude` as always. It uses the account of the folder you are in:
 
 ```text
 ~/work                -> work       (your work account)
@@ -10,69 +38,7 @@ folder decide which one `claude` uses.
 ~/other               -> asks once, then remembers
 ```
 
-No more `/logout` and `/login` to switch: every account stays logged in, side by
-side, and `claude` picks the right one from where you run it.
-
-> Unix-like systems only (macOS, Linux; Windows through WSL). **Tested on macOS.**
->
-> Docs: <https://switcher.diananerd.com> ·
-> [How it compares to other tools](docs/comparison.md)
-
-## Install
-
-```sh
-curl -fsSL https://switcher.diananerd.com | sh
-```
-
-It downloads the binary for your machine from GitHub Releases and checks its
-SHA-256, then shows what it will change (the binary in `~/.local/bin`, a marked
-block in your shell rc file) and asks: **1) Proceed**, 2) Customize, 3) Cancel.
-It ends with the next steps, and on a fresh install offers to run
-`claude-account setup` right away.
-
-No terminal, `CI` set, or `sh -s -- -y`: it installs with the defaults without
-asking. Options: `sh -s -- --help`.
-
-It first shows what it found (system, Claude Code, any installed copy, shell,
-PATH) and checks every dependency at once. Nothing changes until the download is
-verified and runs; every error says what to do and whether anything changed.
-Running it again is always safe: it upgrades, reinstalls, or finishes an
-interrupted install, and leaves the same files every time.
-
-**Update**: `claude-account update` (or run the install command again). It
-shows `upgrade 0.1.0 -> 0.1.1` before changing anything and keeps your profiles
-and mappings. When a newer release exists, commands you run in a terminal end
-with a notice (info for a patch, warning for a minor, danger for a major
-release); `claude-account doctor` reports it too. Only stable releases are
-offered; a specific one: `update --version v0.1.0` (older ones are shown as
-a downgrade). `CLAUDE_ACCOUNT_NO_UPDATE_CHECK=1` turns the check off.
-
-Other ways: build it with Rust 1.88 or newer, then run
-`claude-account shell install` and `claude-account setup`:
-
-```sh
-cargo install --locked --tag vX.Y.Z \
-  --git https://github.com/diananerd/claude-account-switcher
-```
-
-## How it works
-
-Claude Code keeps its login and settings in a config dir, `~/.claude` by default,
-and honours `CLAUDE_CONFIG_DIR` to use another one. The login is tied to that dir,
-so each dir is an independent account.
-
-- A **profile** is a name for a config dir: its own login, or another name for an
-  existing profile's login (`--same-as`).
-- Your current login in `~/.claude` becomes a profile as it is; nothing is moved.
-- New profiles live in `~/.local/share/claude-account/profiles/<name>` and share
-  your settings, skills, agents, hooks, plugins, memory and history with
-  `~/.claude` through symlinks. Only the login and account identity are separate.
-- The shell integration defines a `claude` function that resolves the profile for
-  the current directory and runs the real `claude` with it.
-
-## Daily use
-
-Run `claude` as always. In a directory with no profile yet, it asks once:
+In a folder with no account yet, it asks once and remembers the answer:
 
 ```text
 ? Claude Code account for ~/other/new-idea
@@ -80,108 +46,75 @@ Run `claude` as always. In a directory with no profile yet, it asks once:
   work      you@company.com
 ```
 
-Enter takes the default; type to filter. The choice is remembered for the project
-(the repository root, so subfolders and worktrees follow).
+Enter takes the default; type to filter; **+ New profile** adds an account on
+the spot.
 
-Need another account? Pick **+ New profile** there (or run
-`claude-account login <new-name>`): it creates the profile, opens the browser to
-log in, and continues with it. `claude auth login`, or `/login` inside a session,
-also logs in whichever profile the folder uses.
+| Command | Does |
+| --- | --- |
+| `csw` | switch this project's account |
+| `csw status` | which account applies here, and why |
+| `csw use work ~/work` | map a folder (subfolders follow) |
+| `csw list` | your accounts and their logins |
+| `csw login client` | add or log in an account (`--sso` for SSO) |
+| `csw doctor` | check everything (`--fix` repairs) |
+| `csw update` | update to the latest release |
 
-To change a project later, run `claude-account` in it and pick another profile.
-A running session keeps its account; exit and run `claude --continue` to
-resume the conversation under the new one.
+A running session keeps its account: after switching, exit and run
+`claude --continue` to resume the same conversation under the new one.
 
-## Which profile applies
+Every command also works in scripts: pass everything as arguments, `-y` to
+accept confirmations, `--json` for machine-readable output.
 
-The nearest mapped ancestor wins, so a folder inherits its parent's profile and
-can override it:
-
-```sh
-claude-account use work ~/work                    # everything under ~/work
-claude-account use personal ~/work/side-project   # except this folder
-```
-
-It resolves the same way through symlinks, in any letter case on case-insensitive
-disks, and from git worktrees that live outside their repository.
-
-A `.claude-account` file containing a profile name pins a folder too, and can
-be committed (`claude-account use <profile> --local`). The machine mapping wins
-over a file at the same folder.
-
-## Commands
-
-| | |
-|---|---|
-| `claude-account` | switch this project's profile (interactive) |
-| `claude-account setup` | guided first-time setup |
-| `claude-account status` | which profile applies here, and why |
-| `claude-account use <profile> [dir]` | map a project or folder |
-| `claude-account forget [dir]` | remove a mapping |
-| `claude-account list` | profiles and logins |
-| `claude-account new <name>` | create a profile |
-| `claude-account login <profile>` | log in (opens the browser; `--sso` for SSO); creates the profile if new |
-| `claude-account run <profile> [args]` | run claude with a profile once |
-| `claude-account doctor` | check everything (`--fix` repairs) |
-| `claude-account update` | update to the latest stable release |
-
-Every command and flow works both ways:
-
-- **Interactive** (in a terminal): it asks only for what you did not pass, with
-  the likely answer preselected. Destructive questions default to no.
-- **Headless** (scripts, CI, `--no-input`): it never asks. Pass everything as
-  arguments, `-y` to accept confirmations, `--json` for machine-readable output.
-  A missing answer is a usage error (exit 2) that names the flag to pass.
-
-Full reference: [docs/reference.md](docs/reference.md).
-
-## Status line
-
-Show the active profile in Claude Code's status line by adding this to your
-status line script:
+## Update and uninstall
 
 ```sh
-profile=$(echo "$input" | claude-account statusline)   # "work" or "work (here: personal)"
+csw update                 # the latest stable release; keeps your accounts
+csw uninstall              # the shell integration, the command and csw
+csw uninstall --purge      # also logs out and deletes the accounts it added
 ```
+
+When a new release is out, commands you run in a terminal end with a notice.
+Each command shows what it will do and asks first; `-y` skips the question.
 
 ## Claude Code plugin
 
-Optional. Lets Claude show or switch the project's profile (`/claude-account:switch`)
-and tells Claude when a session runs under a different profile than its folder.
+Optional. Lets Claude show or switch the project's account
+(`/claude-account:switch`) and tells Claude when a session runs under a
+different account than its folder.
 
 ```text
 /plugin marketplace add diananerd/claude-account-switcher
 /plugin install claude-account@claude-account-switcher
 ```
 
-Update it with `/plugin marketplace update claude-account-switcher`, then
+Update it with `/plugin marketplace update claude-account-switcher` and
 `/plugin update claude-account@claude-account-switcher`; remove it with
-`/plugin uninstall claude-account@claude-account-switcher`. It needs the CLI;
-without it the skill says how to install it and the hook does nothing.
+`/plugin uninstall claude-account@claude-account-switcher`.
 
-## Uninstall
+## Status line
 
-```sh
-claude-account uninstall            # shell integration and binary; keeps profiles
-claude-account uninstall --purge    # also logs out and deletes the profiles it created
-```
-
-Both show what they will remove and ask first (default no); add `-y` to skip
-the question. Or through the installer:
+To show the active account in Claude Code's status line, add this to your
+status line script:
 
 ```sh
-curl -fsSL https://switcher.diananerd.com | sh -s -- --uninstall [--purge]
+account=$(echo "$input" | claude-account statusline)   # "work" or "work (here: personal)"
 ```
-
-`~/.claude` is never touched.
 
 ## Limitations
 
-- Only launches through your shell are routed. The desktop app and IDE extensions
-  use `~/.claude` unless started from a shell that has the integration.
-- A session cannot change account while running (relaunch with `claude --continue`).
-- Logging in uses whatever claude.ai account your browser is signed in to; switch
-  there (or use a private window) before `claude-account login`.
+- Only launches through your shell are routed. The desktop app and IDE
+  extensions use `~/.claude` unless started from a shell with the integration.
+- A session cannot change account while running; relaunch with
+  `claude --continue`.
+- Logging in uses whatever claude.ai account your browser is signed in to;
+  switch there (or use a private window) before `csw login`.
+
+## More
+
+- [Reference](docs/reference.md): every command, file, variable and exit code.
+- [How it works](docs/how-it-works.md): profiles, which account applies,
+  the installer, building from source.
+- [Comparison](docs/comparison.md): other tools, and when to pick them.
 
 ## Status
 

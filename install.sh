@@ -29,6 +29,8 @@ VERSION="${CLAUDE_ACCOUNT_VERSION:-latest}"
 # Base URL holding the release assets; overridable for mirrors and tests.
 DOWNLOAD_URL="${CLAUDE_ACCOUNT_DOWNLOAD_URL:-}"
 MODIFY_RC=1
+# A short command next to the binary (a symlink), so `csw status` works too.
+ALIAS="${CLAUDE_ACCOUNT_ALIAS-csw}"
 ACTION=install
 PURGE=""
 YES=0
@@ -48,6 +50,8 @@ Options:
   --bin-dir DIR     where to put the binary (default: ~/.local/bin)
   --version TAG     a specific release, e.g. v0.1.0 (default: latest)
   --no-modify-rc    do not add the shell integration to your rc file
+  --alias NAME      the short command to add next to it (default: csw)
+  --no-alias        do not add a short command
   --uninstall       remove the binary and the shell integration
   --purge           with --uninstall: also log out and delete the profiles it created
   -h, --help        this help
@@ -99,12 +103,20 @@ while [ $# -gt 0 ]; do
     --version) [ $# -ge 2 ] || fail "--version needs a tag, e.g. v0.1.0"; VERSION="$2"; shift 2 ;;
     --version=*) VERSION="${1#*=}"; shift ;;
     --no-modify-rc) MODIFY_RC=0; shift ;;
+    --alias) [ $# -ge 2 ] || fail "--alias needs a name"; ALIAS="$2"; shift 2 ;;
+    --alias=*) ALIAS="${1#*=}"; shift ;;
+    --no-alias) ALIAS=""; shift ;;
     --uninstall) ACTION=uninstall; shift ;;
     --purge) PURGE="--purge"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; fail "unknown option: $1" ;;
   esac
 done
+case "$ALIAS" in
+  "") ;;
+  *[!a-z0-9-]*|-*) fail "--alias must be lowercase letters, digits and dashes (got: $ALIAS)" ;;
+  "$BIN_NAME") ALIAS="" ;;
+esac
 if [ -n "$PURGE" ] && [ "$ACTION" != uninstall ]; then
   fail "--purge only goes with --uninstall"
 fi
@@ -160,7 +172,7 @@ install_hint() {
 check_deps() {
   missing=""
   # gzip too: GNU tar runs it to read .tar.gz (bsdtar on macOS has it built in).
-  for t in uname tar gzip mktemp mkdir cp mv chmod rm dirname sed tr cut sort head tail; do
+  for t in uname tar gzip mktemp mkdir cp mv chmod rm ln readlink dirname sed tr cut sort head tail; do
     have "$t" || missing="$missing $t"
   done
   if have curl; then FETCH=curl; elif have wget; then FETCH=wget; else missing="$missing curl"; fi
@@ -334,6 +346,25 @@ rc_plan() { # <binary>
   esac
 }
 
+# What the short command step would do: add, keep, skip (taken) or none.
+# Sets ALIAS_ACTION and prints the plan line.
+alias_plan() {
+  ALIAS_ACTION=none
+  [ -n "$ALIAS" ] || return 0
+  link="$BIN_DIR/$ALIAS"
+  if [ -L "$link" ] && [ "$(readlink "$link")" = "$BIN_NAME" ]; then
+    ALIAS_ACTION=keep; printf 'keep the short command %s\n' "$ALIAS"; return 0
+  fi
+  if [ -e "$link" ] || [ -L "$link" ]; then
+    ALIAS_ACTION=taken; printf 'skip the short command %s: %s already exists\n' "$ALIAS" "$(tilde "$link")"; return 0
+  fi
+  other=$(command -v "$ALIAS" 2>/dev/null || true)
+  if [ -n "$other" ]; then
+    ALIAS_ACTION=taken; printf 'skip the short command %s: it is already a command (%s)\n' "$ALIAS" "$(tilde "$other")"; return 0
+  fi
+  ALIAS_ACTION=add; printf 'add the short command %s (a link to claude-account)\n' "$ALIAS"
+}
+
 # ------------------------------------------------------------------ install
 
 install() {
@@ -351,7 +382,7 @@ install() {
 
   TMP=$(mktemp -d 2>/dev/null || mktemp -d -t claude-account)
   # Always leave no temp files, and no half-copied binary next to the real one.
-  trap 'rm -rf "$TMP"; rm -f "$BIN_DIR/.$BIN_NAME.new"' EXIT
+  trap 'rm -rf "$TMP"; rm -f "$BIN_DIR/.$BIN_NAME.new" "$BIN_DIR/.${ALIAS:-_}.new"' EXIT
   trap 'exit 130' INT TERM
 
   say "${B}claude-account installer${N}"
@@ -395,6 +426,8 @@ install() {
       *) say "  - $verb claude-account $OLD_VERSION -> $new_version in $(tilde "$BIN_DIR")" ;;
     esac
     say "  - $(rc_plan "$TMP/$BIN_NAME")"
+    alias_line=$(alias_plan); alias_plan >/dev/null
+    [ -z "$alias_line" ] || say "  - $alias_line"
     [ "$INTERACTIVE" = 1 ] || break
     say ""
     say "  ${B}1)${N} Proceed ${DIM}(default)${N}"
@@ -408,6 +441,12 @@ install() {
         BIN_DIR=$(expand_dir "$answer")
         preflight
         if ask "Add the shell integration, so \`claude\` picks the account per folder?" Y; then MODIFY_RC=1; else MODIFY_RC=0; fi
+        answer=$(ask_value "Short command (a name, or 'none')" "${ALIAS:-none}")
+        case "$answer" in
+          none|"") ALIAS="" ;;
+          *[!a-z0-9-]*|-*) say "Use lowercase letters, digits and dashes; keeping ${ALIAS:-none}." ;;
+          *) ALIAS="$answer" ;;
+        esac
         ;;
       3) say "Cancelled. Nothing was changed."; exit 130 ;;
       *) say "Type 1, 2 or 3." ;;
@@ -425,6 +464,19 @@ install() {
     reinstall) ok "Reinstalled claude-account $new_version in $(tilde "$BIN_DIR")" ;;
     upgrade) ok "Upgraded claude-account $OLD_VERSION -> $new_version in $(tilde "$BIN_DIR")" ;;
     downgrade) ok "Downgraded claude-account $OLD_VERSION -> $new_version in $(tilde "$BIN_DIR")" ;;
+  esac
+  case "$ALIAS_ACTION" in
+    add)
+      # Relative, created beside and renamed into place: atomic, and it follows
+      # the binary if the folder moves.
+      if ln -s "$BIN_NAME" "$BIN_DIR/.$ALIAS.new" && mv -f "$BIN_DIR/.$ALIAS.new" "$BIN_DIR/$ALIAS"; then
+        ok "Added the short command $ALIAS"
+      else
+        ALIAS_ACTION=none
+        warn "could not add the short command $ALIAS"
+      fi
+      ;;
+    taken) warn "$alias_line; choose another with --alias NAME" ;;
   esac
   rc_changed=0
   rc_file=""
@@ -474,8 +526,7 @@ install() {
     if [ "$MODIFY_RC" = 0 ] && ! on_path "$BIN_DIR"; then
       warn "$(tilde "$BIN_DIR") is not on your PATH; add it so the claude-account command is found."
     fi
-    say ""
-    info "Help: claude-account --help · Docs: $DOCS"
+    closing
     return
   fi
 
@@ -496,6 +547,15 @@ install() {
   else
     say "  $n. Run ${C}claude-account setup${N} to name your accounts, log them in and map folders"; n=$((n + 1))
     say "  $n. Run ${C}claude${N} in any project: it uses that folder's account, or asks once"
+  fi
+  closing
+}
+
+# The same last lines whether or not setup ran.
+closing() {
+  if [ "$ALIAS_ACTION" = add ] || [ "$ALIAS_ACTION" = keep ]; then
+    say ""
+    say "Tip: ${C}$ALIAS${N} is short for claude-account, e.g. ${C}$ALIAS status${N}."
   fi
   say ""
   info "Help: claude-account --help · Docs: $DOCS"

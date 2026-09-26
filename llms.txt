@@ -21,5 +21,5 @@ Key facts for an assistant helping a user:
 
 ## Install
 
-- `curl -fsSL https://switcher.diananerd.com | sh`, then `claude-account setup`
+- `curl -fsSL https://switcher.diananerd.com | sh`, then `claude-account setup`. The installer also adds `csw`, a short name for `claude-account` (so `csw status`, `csw setup`); a cargo build has only the full name.
 - Uninstall: `claude-account uninstall [--purge]`

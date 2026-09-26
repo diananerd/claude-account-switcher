@@ -11,6 +11,7 @@ const repo = "https://github.com/diananerd/claude-account-switcher";
 const links: Record<string, string> = {
   "docs/reference.md": "/reference",
   "docs/comparison.md": "/comparison",
+  "docs/how-it-works.md": "/how-it-works",
   "AGENTS.md": `${repo}/blob/main/AGENTS.md`,
   LICENSE: `${repo}/blob/main/LICENSE`,
 };
@@ -57,6 +58,7 @@ export default defineConfig({
         items: [
           { text: "Guide", link: "/guide" },
           { text: "Reference", link: "/reference" },
+          { text: "How it works", link: "/how-it-works" },
           { text: "Comparison", link: "/comparison" },
           { text: "For LLMs (llms.txt)", link: "/llms.txt", target: "_self" },
         ],

@@ -838,6 +838,7 @@ if selected install; then
       export HOME="$SANDBOX/inst" CLAUDE_ACCOUNT_DOWNLOAD_URL="file://$REL" PATH="$SANDBOX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
       mkdir -p "$HOME"; printf 'export MINE=1\n' > "$HOME/.zshrc"
       sh "$REPO/install.sh" > "$SANDBOX/i1.log" 2>&1; echo $? > "$SANDBOX/i1.rc"
+      readlink "$HOME/.local/bin/csw" > "$SANDBOX/a.link" 2>&1; "$HOME/.local/bin/csw" --version > "$SANDBOX/a.run" 2>&1
       sh "$REPO/install.sh" > "$SANDBOX/i2.log" 2>&1
       printf '#!/bin/sh\necho "claude-account 0.0.1"\n' > "$HOME/.local/bin/claude-account"
       sh "$REPO/install.sh" > "$SANDBOX/iup.log" 2>&1
@@ -853,6 +854,7 @@ if selected install; then
       sh "$REPO/install.sh" > "$SANDBOX/upgrade.log" 2>&1
       sh "$REPO/install.sh" --uninstall > "$SANDBOX/u1.log" 2>&1; echo $? > "$SANDBOX/u1.rc"
       [ -e "$HOME/.local/bin/claude-account" ] && echo yes > "$SANDBOX/u1.bin" || echo no > "$SANDBOX/u1.bin"
+      [ -L "$HOME/.local/bin/csw" ] && echo yes > "$SANDBOX/u1.alias" || echo no > "$SANDBOX/u1.alias"
       cp "$HOME/.zshrc" "$SANDBOX/u1.zshrc"
       [ -f "$HOME/.config/claude-account/config.toml" ] && echo kept > "$SANDBOX/u1.cfg" || echo gone > "$SANDBOX/u1.cfg"
       sh "$REPO/install.sh" --no-modify-rc > "$SANDBOX/i3.log" 2>&1
@@ -873,6 +875,10 @@ if selected install; then
     want_has "install: reports the version" "Installed claude-account" "$(cat "$SANDBOX/i1.log")"
     want_has "install: puts ~/.local/bin on PATH in the block, through \$HOME" 'export PATH="$HOME/.local/bin:$PATH"' "$(cat "$SANDBOX/i.zshrc")"
     want "install: running twice leaves one block" "1" "$(cat "$SANDBOX/i.blocks")"
+    want "install: adds the short command csw as a relative link" "claude-account" "$(cat "$SANDBOX/a.link")"
+    want_has "install: ...that runs claude-account" "claude-account $CURRENT_V" "$(cat "$SANDBOX/a.run")"
+    want_has "install: ...and says how to use it" "csw status" "$(cat "$SANDBOX/i1.log")"
+    want_has "install: a second run keeps it" "keep the short command csw" "$(cat "$SANDBOX/i2.log")"
     want_has "install: the same version again is a reinstall" "reinstall claude-account" "$(cat "$SANDBOX/i2.log")"
     want_has "install: an older installed version is an upgrade" "upgrade claude-account 0.0.1 ->" "$(cat "$SANDBOX/iup.log")"
     want_has "install: ...and says so when done" "Upgraded claude-account 0.0.1 ->" "$(cat "$SANDBOX/iup.log")"
@@ -886,6 +892,7 @@ if selected install; then
     want_not "install: ...without suggesting setup again" "claude-account setup" "$(cat "$SANDBOX/upgrade.log")"
     want "uninstall: exits 0" "0" "$(cat "$SANDBOX/u1.rc")"
     want "uninstall: deletes the binary" "no" "$(cat "$SANDBOX/u1.bin")"
+    want "uninstall: ...and the short command" "no" "$(cat "$SANDBOX/u1.alias")"
     want "uninstall: restores the rc file" "export MINE=1" "$(cat "$SANDBOX/u1.zshrc")"
     want "uninstall: keeps profiles without --purge" "kept" "$(cat "$SANDBOX/u1.cfg")"
     want "install: --no-modify-rc leaves the rc alone" "export MINE=1" "$(cat "$SANDBOX/i3.zshrc")"
@@ -899,7 +906,7 @@ if selected install; then
     want "install: unknown options fail" "1" "$(cat "$SANDBOX/bogus.rc")"
     want "install: --purge without --uninstall fails" "1" "$(cat "$SANDBOX/purgeonly.rc")"
     # Environment detection, dependencies, safe failure, convergence.
-    TOOLS="sh uname tar gzip mktemp mkdir cp mv chmod rm dirname sed tr cut sort head tail cat id sysctl sw_vers grep curl shasum"
+    TOOLS="sh uname tar gzip mktemp mkdir cp mv chmod rm ln readlink dirname sed tr cut sort head tail cat id sysctl sw_vers grep curl shasum"
     mkbin() { local d="$1" t p; shift; rm -rf "$d"; mkdir -p "$d"
       for t in "$@"; do p=$(command -v "$t" 2>/dev/null) && ln -s "$p" "$d/$t"; done; }
     without() { local skip=" $1 " t out=""; for t in $TOOLS; do case "$skip" in *" $t "*) ;; *) out="$out $t" ;; esac; done; echo "$out"; }
@@ -964,9 +971,30 @@ if selected install; then
     want "install: a second run leaves the rc file byte-identical" "" "$(cat "$SANDBOX/c.rc.cmp")"
     want "install: ...and the binary byte-identical" "" "$(cat "$SANDBOX/c.bin.cmp")"
     want "install: an interrupted install finishes by running it again" "0" "$(cat "$SANDBOX/c2.rc")"
-    want "install: ...leaving only the binary" "claude-account " "$(cat "$SANDBOX/c2.ls")"
+    want "install: ...leaving only the binary and its short command" "claude-account csw " "$(cat "$SANDBOX/c2.ls")"
     want "install: ...and one shell block" "1" "$(cat "$SANDBOX/c2.blocks")"
     want_has "install: warns when another copy wins on PATH" "comes before ~/.local/bin on your PATH" "$(cat "$SANDBOX/c3.log")"
+    # Short command: never over someone else's file or command; configurable.
+    (
+      export HOME="$SANDBOX/al" CLAUDE_ACCOUNT_DOWNLOAD_URL="file://$REL" PATH="$SANDBOX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      mkdir -p "$HOME/.local/bin" "$SANDBOX/othercmd"; : > "$HOME/.zshrc"
+      printf '#!/bin/sh\necho mine\n' > "$HOME/.local/bin/csw"; chmod +x "$HOME/.local/bin/csw"
+      sh "$REPO/install.sh" > "$SANDBOX/al1.log" 2>&1; cat "$HOME/.local/bin/csw" > "$SANDBOX/al1.kept"
+      rm "$HOME/.local/bin/csw"; printf '#!/bin/sh\n' > "$SANDBOX/othercmd/csw"; chmod +x "$SANDBOX/othercmd/csw"
+      PATH="$SANDBOX/othercmd:$PATH" sh "$REPO/install.sh" > "$SANDBOX/al2.log" 2>&1
+      [ -e "$HOME/.local/bin/csw" ] && echo yes > "$SANDBOX/al2.made" || echo no > "$SANDBOX/al2.made"
+      sh "$REPO/install.sh" --no-alias > /dev/null 2>&1; [ -e "$HOME/.local/bin/csw" ] && echo yes > "$SANDBOX/al3" || echo no > "$SANDBOX/al3"
+      sh "$REPO/install.sh" --alias cacc > "$SANDBOX/al4.log" 2>&1; readlink "$HOME/.local/bin/cacc" > "$SANDBOX/al4.link" 2>&1
+      "$HOME/.local/bin/claude-account" uninstall -y > "$SANDBOX/al5.log" 2>&1; [ -e "$HOME/.local/bin/cacc" ] && echo yes > "$SANDBOX/al5" || echo no > "$SANDBOX/al5"
+    )
+    want_has "install: a file already named csw is left alone" "skip the short command csw: ~/.local/bin/csw already exists" "$(cat "$SANDBOX/al1.log")"
+    want_has "install: ...untouched" "echo mine" "$(cat "$SANDBOX/al1.kept")"
+    want_has "install: ...and says how to pick another" "--alias NAME" "$(cat "$SANDBOX/al1.log")"
+    want_has "install: a csw command elsewhere on PATH is not shadowed" "it is already a command" "$(cat "$SANDBOX/al2.log")"
+    want "install: ...so no link is made" "no" "$(cat "$SANDBOX/al2.made")"
+    want "install: --no-alias adds none" "no" "$(cat "$SANDBOX/al3")"
+    want "install: --alias picks another name" "claude-account" "$(cat "$SANDBOX/al4.link")"
+    want "uninstall: removes a custom short command too" "no" "$(cat "$SANDBOX/al5")"
     # A whole life, then --purge: nothing of it may remain but the XDG parents.
     (
       export HOME="$SANDBOX/life" CLAUDE_ACCOUNT_DOWNLOAD_URL="file://$REL" PATH="$SANDBOX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -996,7 +1024,7 @@ if selected install; then
         [ -e "$HOME/.local/bin/claude-account" ] && echo yes > "$SANDBOX/ii0.bin" || echo no > "$SANDBOX/ii0.bin"
         pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- ENTER n ENTER > "$SANDBOX/ii1.log"
         pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- ENTER > "$SANDBOX/ii2.log"
-        pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- 2 ENTER '~/bin2' ENTER n ENTER 1 ENTER n ENTER > "$SANDBOX/ii3.log"
+        pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- 2 ENTER '~/bin2' ENTER n ENTER ENTER 1 ENTER n ENTER > "$SANDBOX/ii3.log"
         rm -rf "$HOME/.config/claude-account" "$HOME/.local/bin/claude-account"; printf 'export MINE=1\n' > "$HOME/.zshrc"
         pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- ENTER ENTER s o l o ENTER n n ENTER > "$SANDBOX/ii5.log"
         [ -x "$HOME/bin2/claude-account" ] && echo yes > "$SANDBOX/ii3.bin" || echo no > "$SANDBOX/ii3.bin"

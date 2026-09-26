@@ -109,6 +109,17 @@ fn more(env: &Env, root: &Path, mapped_here: bool) -> Result<ExitCode> {
 
 // ------------------------------------------------------------------ setup
 
+/// Symlinks in the binary's own folder that resolve to it.
+pub fn short_commands(exe: &Path) -> Vec<PathBuf> {
+    let Some(dir) = exe.parent() else { return vec![] };
+    let Ok(entries) = std::fs::read_dir(dir) else { return vec![] };
+    entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| std::fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink()))
+        .filter(|p| std::fs::canonicalize(p).ok().as_deref() == Some(exe))
+        .collect()
+}
+
 /// Numbered "Next steps", the same shape everywhere a flow ends.
 pub fn next_steps(steps: &[String]) {
     if steps.is_empty() {
@@ -467,6 +478,13 @@ pub fn uninstall(env: &Env, purge: bool, mode: Mode) -> Result<ExitCode> {
             println!("Running from a build directory ({}); left in place.", env.tilde(&e));
         }
         Some(e) => {
+            // Short commands (the installer's `csw`, or any other name) are links
+            // to this binary in its folder; they go with it, and nothing else does.
+            for link in short_commands(&e) {
+                if std::fs::remove_file(&link).is_ok() {
+                    println!("Deleted {}", env.tilde(&link));
+                }
+            }
             std::fs::remove_file(&e).map_err(|err| format!("cannot delete {}: {err}", env.tilde(&e)))?;
             println!("Deleted {}", env.tilde(&e));
         }

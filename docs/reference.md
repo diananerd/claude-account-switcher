@@ -148,7 +148,13 @@ Installer: interactive when a terminal is available (answers are read from
 offers Proceed / Customize (folder, rc file) / Cancel, and ends with the next
 steps, offering `setup` on a fresh install. Headless with `-y`, without a
 terminal, or with `CI` set. Flags: `-y`, `--bin-dir`, `--version`,
-`--no-modify-rc`, `--uninstall`, `--purge`. Variables: `CLAUDE_ACCOUNT_BIN_DIR`,
+`--no-modify-rc`, `--alias NAME` / `--no-alias`, `--uninstall`, `--purge`.
+
+The installer also adds a short command, `csw` by default: a relative symlink
+to `claude-account` in the same folder. It is never created over an existing
+file or over a command of that name elsewhere on PATH (the installer says so
+and suggests `--alias`). `uninstall` removes every link in the binary's folder
+that points to it, whatever its name, and nothing else. Variables: `CLAUDE_ACCOUNT_BIN_DIR`,
 `CLAUDE_ACCOUNT_VERSION`, `CLAUDE_ACCOUNT_DOWNLOAD_URL` (mirror of the release
 assets). `NO_COLOR` turns colour off, here and in the binary.
 

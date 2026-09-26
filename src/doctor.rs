@@ -190,6 +190,15 @@ fn run(env: &Env, fix: bool, json: bool) -> Result<ExitCode> {
         std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d.join("claude-account").is_file()));
     if on_path {
         r.ok("claude-account is on PATH");
+        if let Some(exe) = std::env::current_exe().ok().and_then(|e| std::fs::canonicalize(e).ok()) {
+            let names: Vec<String> = crate::setup::short_commands(&exe)
+                .iter()
+                .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+                .collect();
+            if !names.is_empty() {
+                r.ok(format!("short command: {}", names.join(", ")));
+            }
+        }
     } else {
         r.warn("claude-account is not on PATH", "add its folder to PATH (the installer does this)");
     }
