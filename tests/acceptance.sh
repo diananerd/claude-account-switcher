@@ -344,6 +344,16 @@ if selected lifecycle; then
   want_has "lifecycle: ...and verifies the result" "client is logged in as client@example.com" "$out"
   want "lifecycle: list shows the new login" "client@example.com" "$(profile_json client | jq -r .email)"
   want_has "lifecycle: login passes extra args (--sso)" "ARGS=auth login --sso" "$("$CA" login client --sso </dev/null 2>&1)"
+  want_has "lifecycle: add --sso without a terminal says how to log in with SSO" "login sso-a --sso" \
+    "$("$CA" add sso-a --sso </dev/null 2>&1)"
+  want_has "lifecycle: add --sso in a terminal logs in with SSO" "ARGS=auth login --sso --email a@example.com" \
+    "$(pty_in "$HOME" "$CA" add sso-b --sso --email a@example.com -- y)"
+  "$CA" add sso-c --sso --no-login >/dev/null 2>&1; rc=$?
+  want "lifecycle: add --sso conflicts with --no-login (usage error)" "2" "$rc"
+  "$CA" add sso-c --sso --same-as client >/dev/null 2>&1; rc=$?
+  want "lifecycle: add --sso conflicts with --same-as (usage error)" "2" "$rc"
+  "$CA" remove sso-a --purge -y </dev/null >/dev/null 2>&1
+  "$CA" remove sso-b --purge -y </dev/null >/dev/null 2>&1
   want_has "lifecycle: logging an alias in logs its owner in" "personal uses the login of work" \
     "$(FAKE_LOGIN_EMAIL=work@example.com "$CA" login personal </dev/null 2>&1)"
   "$CA" add dup --no-login >/dev/null

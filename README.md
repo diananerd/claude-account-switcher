@@ -41,9 +41,10 @@ Run `claude` as always. It uses the account of the folder you are in:
 In a folder with no account yet, it asks once and remembers the answer:
 
 ```text
-? Claude Code account for ~/other/new-idea
+? Claude Code account for ~/other/new-idea ›
 ❯ personal  you@example.com
   work      you@company.com
+  + Add an account
 ```
 
 Enter takes the default; type to filter; **+ Add an account** adds one on the

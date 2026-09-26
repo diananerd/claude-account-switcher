@@ -78,7 +78,8 @@ With Rust 1.88 or newer:
 
 ```sh
 cargo install --locked --tag vX.Y.Z \
-  --git https://github.com/diananerd/claude-account-switcher claude-account-switcher shell install && claude-switcher setup
+  --git https://github.com/diananerd/claude-account-switcher
+claude-switcher shell install && claude-switcher setup
 ```
 
 A build installed this way has no `csw`; add one with

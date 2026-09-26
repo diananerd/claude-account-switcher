@@ -67,7 +67,7 @@ pub fn interactive(env: &Env) -> Result<ExitCode> {
         }
         Some(ui::Choice::Extra(0)) => profiles::add(
             env,
-            profiles::AddArgs { name: None, same_as: None, base: false, dir: None, login: true },
+            profiles::AddArgs { name: None, same_as: None, base: false, dir: None, login: true, login_args: vec![] },
             true,
         ),
         Some(ui::Choice::Extra(_)) => {

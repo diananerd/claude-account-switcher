@@ -134,19 +134,28 @@ pub struct AddArgs {
     pub base: bool,
     pub dir: Option<PathBuf>,
     pub login: bool,
+    /// Passed to `claude auth login`, e.g. --sso.
+    pub login_args: Vec<OsString>,
 }
 
 pub fn add(env: &Env, args: AddArgs, prompt: bool) -> Result<ExitCode> {
-    let name = create(env, args.name, args.same_as, args.base, args.dir, prompt)?;
+    // Login options (--sso, --email) only make sense for an account of its own.
+    let ask_kind = prompt && args.login_args.is_empty();
+    let name = create_as(env, args.name, args.same_as, args.base, args.dir, prompt, ask_kind)?;
     let cfg = env.load()?;
     ui::done(&format!("Profile {name}: {}", ui::describe(env, &cfg, &name)));
     let dir = cfg.config_dir(&name)?;
     let owns_login = cfg.alias_target(&name).is_none();
     if owns_login && claude::cached_email(env, &dir).is_none() && args.login {
         if prompt && ui::confirm(&format!("Log {name} in now?"), true) == Some(true) {
-            return login(env, Some(name), vec![], true);
+            return login(env, Some(name), args.login_args, true);
         }
-        ui::hint(&format!("log it in: claude-switcher login {name}   (add --sso for SSO accounts)"));
+        if args.login_args.is_empty() {
+            ui::hint(&format!("log it in: claude-switcher login {name}   (add --sso for SSO accounts)"));
+        } else {
+            let extra: Vec<String> = args.login_args.iter().map(|a| a.to_string_lossy().into_owned()).collect();
+            ui::hint(&format!("log it in: claude-switcher login {name} {}", extra.join(" ")));
+        }
         return Ok(ExitCode::SUCCESS);
     }
     hint_use(&cfg, &name);
@@ -172,6 +181,19 @@ pub fn create(
     dir: Option<PathBuf>,
     prompt: bool,
 ) -> Result<String> {
+    create_as(env, name, same_as, base, dir, prompt, prompt)
+}
+
+/// `create`, where `ask_kind` false skips asking what the profile is (its own login by default).
+fn create_as(
+    env: &Env,
+    name: Option<String>,
+    same_as: Option<String>,
+    base: bool,
+    dir: Option<PathBuf>,
+    prompt: bool,
+    ask_kind: bool,
+) -> Result<String> {
     let cfg = env.load()?;
     let check = |n: &String| -> std::result::Result<(), String> {
         valid_name(n)?;
@@ -185,7 +207,7 @@ pub fn create(
     check(&name).map_err(|e| format!("invalid profile name {name:?}: {e}"))?;
 
     let (mut same_as, mut base) = (same_as, base);
-    if prompt && same_as.is_none() && !base && dir.is_none() {
+    if ask_kind && same_as.is_none() && !base && dir.is_none() {
         let base_free = env.base_canonical().is_some_and(|b| cfg.profiles_for_dir(&b).is_empty());
         let mut kinds = vec![("own", "A Claude account of its own (you log in to it next)".to_string())];
         if base_free {

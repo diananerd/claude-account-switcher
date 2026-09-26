@@ -44,7 +44,7 @@ use state::{Config, Env, Result};
         claude-switcher use work ~/work     everything under ~/work uses the profile work\n  \
         claude-switcher add work --sso      add an account and log it in\n  \
         claude-switcher status --json       what applies here, for scripts\n\n\
-        Docs: https://github.com/diananerd/claude-account-switcher"
+        Docs: https://switcher.diananerd.com"
 )]
 struct Cli {
     /// Never ask anything; fail with a usage error instead (also CLAUDE_SWITCHER_NO_INPUT=1)
@@ -139,6 +139,12 @@ enum Cmd {
         /// Do not log it in now
         #[arg(long)]
         no_login: bool,
+        /// Log in with SSO (passed to `claude auth login`)
+        #[arg(long, conflicts_with_all = ["no_login", "same_as", "base", "dir"])]
+        sso: bool,
+        /// Account email to log in with (passed to `claude auth login`)
+        #[arg(long, value_name = "EMAIL", conflicts_with_all = ["no_login", "same_as", "base", "dir"])]
+        email: Option<String>,
     },
     /// Log an account in again, e.g. when its login expired (extra args go to `claude auth login`, e.g. --sso)
     Login {
@@ -345,8 +351,16 @@ fn dispatch(env: &Env, cli: Cli) -> Result<ExitCode> {
         Some(Cmd::Prune { all }) => mapping::prune(env, all, mode),
         Some(Cmd::List { check }) => profiles::list(env, check, json),
         Some(Cmd::Default { profile }) => profiles::default(env, profile, json, prompt && !json),
-        Some(Cmd::Add { name, same_as, base, dir, no_login }) => {
-            profiles::add(env, profiles::AddArgs { name, same_as, base, dir, login: !no_login }, prompt)
+        Some(Cmd::Add { name, same_as, base, dir, no_login, sso, email }) => {
+            let mut login_args: Vec<OsString> = Vec::new();
+            if sso {
+                login_args.push("--sso".into());
+            }
+            if let Some(email) = email {
+                login_args.extend(["--email".into(), email.into()]);
+            }
+            let args = profiles::AddArgs { name, same_as, base, dir, login: !no_login, login_args };
+            profiles::add(env, args, prompt)
         }
         Some(Cmd::Login { profile, args }) => profiles::login(env, profile, args, prompt),
         Some(Cmd::Logout { profile }) => profiles::logout(env, profile, prompt),

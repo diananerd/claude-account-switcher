@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-09-26
+
+### Fixed
+
+- `add` accepts `--sso` and `--email`, as the docs and `--help` show, and
+  passes them to `claude auth login`. With either, it no longer asks what the
+  profile is: login options mean an account of its own.
+- Docs: the picker example shows the "+ Add an account" row, and the build
+  from source command is two commands again.
+
 ## [0.1.0] - 2026-09-26
 
 First public release.
