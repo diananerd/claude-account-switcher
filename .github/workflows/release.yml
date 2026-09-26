@@ -59,7 +59,7 @@ jobs:
         run: |
           notes=$(awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md)
           # A tag with a suffix (v0.2.0-rc.1) is a pre-release: never "latest", so
-          # the installer and self-update keep offering the last stable one.
+          # the installer and `update` keep offering the last stable one.
           case "$GITHUB_REF_NAME" in *-*) pre=--prerelease ;; *) pre=--latest ;; esac
           gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes "$notes" $pre
 

@@ -38,12 +38,12 @@ verified and runs; every error says what to do and whether anything changed.
 Running it again is always safe: it upgrades, reinstalls, or finishes an
 interrupted install, and leaves the same files every time.
 
-**Update**: `claude-account self-update` (or run the install command again). It
+**Update**: `claude-account update` (or run the install command again). It
 shows `upgrade 0.1.0 -> 0.1.1` before changing anything and keeps your profiles
 and mappings. When a newer release exists, commands you run in a terminal end
 with a notice (info for a patch, warning for a minor, danger for a major
 release); `claude-account doctor` reports it too. Only stable releases are
-offered; a specific one: `self-update --version v0.1.0` (older ones are shown as
+offered; a specific one: `update --version v0.1.0` (older ones are shown as
 a downgrade). `CLAUDE_ACCOUNT_NO_UPDATE_CHECK=1` turns the check off.
 
 Other ways: build it with Rust 1.88 or newer, then run
@@ -122,7 +122,7 @@ over a file at the same folder.
 | `claude-account login <profile>` | log in (opens the browser; `--sso` for SSO); creates the profile if new |
 | `claude-account run <profile> [args]` | run claude with a profile once |
 | `claude-account doctor` | check everything (`--fix` repairs) |
-| `claude-account self-update` | update to the latest stable release |
+| `claude-account update` | update to the latest stable release |
 
 Every command and flow works both ways:
 

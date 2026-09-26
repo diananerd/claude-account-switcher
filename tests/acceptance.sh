@@ -584,7 +584,7 @@ if selected update; then
   want_has "update: doctor says when it is up to date" "is the latest stable release" "$("$CA" doctor 2>&1)"
   latest_is "$(bump minor)"
   want_has "update: doctor names a newer stable release" "$(bump minor) is available" "$("$CA" doctor 2>&1)"
-  want_has "update: ...and the command to get it" "claude-account self-update" "$("$CA" doctor 2>&1)"
+  want_has "update: ...and the command to get it" "claude-account update" "$("$CA" doctor 2>&1)"
   latest_is "$CURRENT_V"
   if command -v expect >/dev/null; then
     (
@@ -616,8 +616,8 @@ if selected update; then
   put_cache "$(bump major)"
   want_not "update: no notice without a terminal (scripts, CI)" "is available" "$("$CA" list 2>&1)"
   rm -f "$cache"
-  want_has "update: a development build points to git" "development build" "$("$CA" self-update 2>&1)"
-  # self-update runs the real installer into its own folder
+  want_has "update: a development build points to git" "development build" "$("$CA" update 2>&1)"
+  # update runs the real installer into its own folder
   case "$(uname -s)-$(uname -m)" in
     Darwin-arm64) T=aarch64-apple-darwin ;; Darwin-x86_64) T=x86_64-apple-darwin ;;
     Linux-x86_64) T=x86_64-unknown-linux-musl ;; Linux-aarch64) T=aarch64-unknown-linux-musl ;; *) T="" ;;
@@ -627,15 +627,15 @@ if selected update; then
     tar -czf "$UREL/claude-account-$T.tar.gz" -C "$UREL/pkg" claude-account
     (cd "$UREL" && shasum -a 256 "claude-account-$T.tar.gz" > "claude-account-$T.tar.gz.sha256")
     cp "$CA" "$SANDBOX/uhome/tools/claude-account"
-    out=$(HOME="$SANDBOX/uhome" "$SANDBOX/uhome/tools/claude-account" self-update 2>&1)
-    want_has "update: self-update when current says so and does nothing" "is the latest stable release" "$out"
+    out=$(HOME="$SANDBOX/uhome" "$SANDBOX/uhome/tools/claude-account" update 2>&1)
+    want_has "update: update when current says so and does nothing" "is the latest stable release" "$out"
     latest_is "$(bump minor)"
     out=$(HOME="$SANDBOX/uhome" CLAUDE_ACCOUNT_INSTALLER_URL="file://$REPO/install.sh" CLAUDE_ACCOUNT_DOWNLOAD_URL="file://$UREL" \
-      "$SANDBOX/uhome/tools/claude-account" self-update 2>&1); rc=$?
+      "$SANDBOX/uhome/tools/claude-account" update 2>&1); rc=$?
     latest_is "$CURRENT_V"
-    want "update: self-update runs the official installer" "0" "$rc"
+    want "update: update runs the official installer" "0" "$rc"
     want_has "update: ...into the binary's own folder" "claude-account $CURRENT_V in ~/tools" "$out"
-  else skip "update: self-update" "no asset naming for this platform"; fi
+  else skip "update: update command" "no asset naming for this platform"; fi
 fi
 
 if selected matrix; then
@@ -653,7 +653,7 @@ if selected matrix; then
     if [ "$rc" = 0 ] && grep -q '^Usage:' "$SANDBOX/m.out"; then ok "matrix: $c --help"; else bad "matrix: $c --help" "rc=$rc"; fi
     case "$c" in
       # These wait for input on stdin, run claude, or change the install: covered elsewhere.
-      launch|run|statusline|hook|init|completions|self-update|uninstall|refresh-update-cache) continue ;;
+      launch|run|statusline|hook|init|completions|update|uninstall|refresh-update-cache) continue ;;
     esac
     rc=$(cd "$HOME/mx" && bounded "$CA" --no-input "$c")
     printf '%-10s rc=%s  %s\n' "$c" "$rc" "$(head -1 "$SANDBOX/m.err" | sed 's/\x1b\[[0-9;]*m//g')" >> "$SANDBOX/matrix.txt"

@@ -8,7 +8,7 @@ Key facts for an assistant helping a user:
 - `claude` (a shell function installed by the tool) resolves the profile of the current directory: nearest mapped ancestor wins; symlinks, letter case and git worktrees resolve to the same answer. Unmapped: a picker asks once and remembers it at the repository root.
 - A running session cannot change account. Change the mapping (`claude-account use <profile>`), then exit and run `claude --continue`.
 - Login is interactive (browser OAuth): the user runs `claude-account login <profile>` in their own terminal (an unknown name creates the profile first), or `/login` inside a session of that profile. Never run login for them.
-- Read state with `claude-account status --json` and `claude-account list --json`. Diagnose with `claude-account doctor` (also reports a newer release). Update with `claude-account self-update` (latest stable).
+- Read state with `claude-account status --json` and `claude-account list --json`. Diagnose with `claude-account doctor` (also reports a newer release). Update with `claude-account update` (latest stable).
 - Config: `~/.config/claude-account/config.toml` (profiles, default, map). New accounts: `~/.local/share/claude-account/profiles/<name>`. Per-folder pin: a `.claude-account` file holding a profile name.
 
 ## Docs

@@ -6,7 +6,7 @@
 //! consulted at most once a day by a detached background process, so no
 //! command ever waits on it. `doctor` reports the same thing headless.
 //!
-//! Updating does not reimplement installation: `self-update` runs the official
+//! Updating does not reimplement installation: `update` runs the official
 //! installer from the repository, which always knows how to install the latest
 //! stable release, whatever its layout. GitHub's "latest release" skips
 //! pre-releases and drafts, so only stable versions are ever offered.
@@ -100,7 +100,7 @@ fn standing(current: &str, latest: &str) -> (bool, String) {
             true,
             format!(
                 "claude-account {current} is a pre-release, newer than the latest stable {latest}; \
-                 to go back to it: claude-account self-update --version v{latest}"
+                 to go back to it: claude-account update --version v{latest}"
             ),
         ),
         None => (true, format!("claude-account {current} is the latest stable release")),
@@ -171,7 +171,7 @@ pub fn notice(env: &Env) {
     }
     let Some(latest) = cached.as_ref().and_then(|v| v.get("latest")).and_then(Value::as_str) else { return };
     let Some(level) = behind(CURRENT, latest) else { return };
-    let msg = format!("claude-account {latest} is available (you have {CURRENT}). Update: claude-account self-update");
+    let msg = format!("claude-account {latest} is available (you have {CURRENT}). Update: claude-account update");
     match level {
         Level::Patch => ui::info(&msg),
         Level::Minor => ui::warning(&format!("{msg} (new features)")),
@@ -196,10 +196,10 @@ fn managed_by(exe: &Path, env: &Env) -> Option<String> {
     }
 }
 
-/// `self-update [--version TAG]`: run the official installer into this
+/// `update [--version TAG]`: run the official installer into this
 /// binary's own folder. Interactive in a terminal (the installer asks), `-y`
 /// otherwise.
-pub fn self_update(env: &Env, version: Option<String>, mode: crate::Mode) -> Result<ExitCode> {
+pub fn update(env: &Env, version: Option<String>, mode: crate::Mode) -> Result<ExitCode> {
     let exe =
         std::env::current_exe().ok().and_then(|e| std::fs::canonicalize(e).ok()).ok_or("cannot locate this binary")?;
     if let Some(cmd) = managed_by(&exe, env) {
@@ -255,7 +255,7 @@ pub fn doctor_line() -> Option<(bool, String, Option<String>)> {
     Some(match fetch_latest() {
         Ok(latest) => {
             let (ok, text) = standing(CURRENT, &latest);
-            (ok, text, (!ok).then(|| "claude-account self-update".to_string()))
+            (ok, text, (!ok).then(|| "claude-account update".to_string()))
         }
         Err(e) => (false, format!("could not check for updates ({e})"), Some("check your connection".into())),
     })

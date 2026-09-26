@@ -24,7 +24,7 @@ Claude Code plugin. Unix-like only.
 | `src/doctor.rs` | `doctor` |
 | `src/shell.rs` | Shell function and marked rc blocks |
 | `src/claude.rs` | Every call to the real `claude` binary |
-| `src/update.rs` | Update notice (cached, background), `self-update` (runs the installer) |
+| `src/update.rs` | Update notice (cached, background), `update` (runs the installer) |
 | `scripts/check-release.sh` | Versions, lock file, changelog and tag agree |
 | `src/ui.rs` | Prompts (dialoguer), all on stderr |
 | `install.sh` | One-line installer / uninstaller (POSIX sh) |

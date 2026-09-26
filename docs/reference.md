@@ -40,7 +40,7 @@ Global flags: `--no-input`, `-y/--yes` (answer yes to confirmations), `--json`
 | `completions <shell>` | Shell completions (bash, zsh, fish, elvish, powershell). | |
 | `statusline` | Status line segment; reads Claude Code's status line JSON on stdin. | |
 | `hook session-start` | SessionStart hook: prints a note for Claude when the session's profile differs from its folder's. | |
-| `self-update [--version TAG]` | Runs the official installer into this binary's folder: latest stable release, or TAG. Interactive in a terminal, `-y` otherwise. A copy owned by Homebrew or cargo (or a development build) gets that tool's command instead. | |
+| `update [--version TAG]` | Runs the official installer into this binary's folder: latest stable release, or TAG. Interactive in a terminal, `-y` otherwise. A copy owned by Homebrew or cargo (or a development build) gets that tool's command instead. | |
 | `uninstall [--purge]` | Shows the plan and confirms (default no; `-y` headless). Removes the shell integration and the binary. `--purge`: also log out and delete the profiles it created and its config file (other files next to it stay); stops before changing anything if a logout fails. | |
 
 ## Updates

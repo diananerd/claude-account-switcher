@@ -195,7 +195,7 @@ enum Cmd {
     /// Claude Code hook entry points
     Hook { event: HookEvent },
     /// Update to the latest stable release (runs the official installer)
-    SelfUpdate {
+    Update {
         /// A specific release instead, e.g. v0.1.0 (pre-releases too)
         #[arg(long, value_name = "TAG")]
         version: Option<String>,
@@ -271,7 +271,7 @@ fn main() -> ExitCode {
                         | Cmd::Completions { .. }
                         | Cmd::Launch { .. }
                         | Cmd::Run { .. }
-                        | Cmd::SelfUpdate { .. }
+                        | Cmd::Update { .. }
                         | Cmd::RefreshUpdateCache
                         | Cmd::Resolve { .. }
                 )
@@ -380,7 +380,7 @@ fn dispatch(env: &Env, cli: Cli) -> Result<ExitCode> {
         Some(Cmd::Statusline) => launch::statusline(env),
         Some(Cmd::Hook { event: HookEvent::SessionStart }) => launch::hook_session_start(env),
         Some(Cmd::Uninstall { purge }) => setup::uninstall(env, purge, mode),
-        Some(Cmd::SelfUpdate { version }) => update::self_update(env, version, mode),
+        Some(Cmd::Update { version }) => update::update(env, version, mode),
         Some(Cmd::RefreshUpdateCache) => update::refresh(env),
         Some(Cmd::Launch { args }) => launch::launch(env, args, None),
         Some(Cmd::Other(args)) => {

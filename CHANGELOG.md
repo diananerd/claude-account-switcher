@@ -8,7 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- Pre-releases compare in semver order: `self-update` and `doctor` no longer
+- Pre-releases compare in semver order: `update` and `doctor` no longer
   call a pre-release "the latest stable release", the release that follows a
   pre-release is offered as an update, and the installer calls it an upgrade.
 - `forget` with nothing to forget is a no-op (exit 0) that says what applies
@@ -40,7 +40,7 @@ First public release.
 - Profile lifecycle: `setup`, `new`, `login` (verified), `logout`, `rename`,
   `remove [--purge]`, `use`, `forget`, `status`, `list`, `map`, `prune`,
   `doctor [--fix]`.
-- Update notice (info, warning or danger by release type) and `self-update`,
+- Update notice (info, warning or danger by release type) and an update command,
   stable releases only.
 - Installer at `curl -fsSL https://switcher.diananerd.com | sh`: inspects the
   machine, checks every dependency, changes nothing until the download is
