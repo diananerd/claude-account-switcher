@@ -1,0 +1,8 @@
+/target
+*.swp
+.DS_Store
+/docs/node_modules
+/docs/.vitepress/dist
+/docs/.vitepress/cache
+/docs/public/llms.txt
+/deploy/.wrangler

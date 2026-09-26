@@ -1,0 +1,16 @@
+{
+  "description": "Tell Claude when this session runs under a different claude-account profile than its directory resolves to.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if command -v claude-account >/dev/null 2>&1; then claude-account hook session-start; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

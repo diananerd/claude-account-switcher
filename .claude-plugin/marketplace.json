@@ -1,0 +1,17 @@
+{
+  "name": "claude-account-switcher",
+  "owner": {
+    "name": "Diana Nerd",
+    "url": "https://github.com/diananerd"
+  },
+  "metadata": {
+    "description": "Run several Claude Code accounts on one machine, chosen per directory."
+  },
+  "plugins": [
+    {
+      "name": "claude-account",
+      "source": "./plugin",
+      "description": "Show or switch the Claude Code account a project uses, and get told when a session runs under the wrong one. Needs the claude-account CLI."
+    }
+  ]
+}

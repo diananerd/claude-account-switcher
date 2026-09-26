@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Tools for the acceptance suite
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y expect zsh jq
+      - run: scripts/check-release.sh
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - run: tests/acceptance.sh
+      - name: Installer lint
+        if: runner.os == 'Linux'
+        run: shellcheck -s sh install.sh scripts/check-release.sh && dash -n install.sh
+      - name: Markdown lint
+        if: runner.os == 'Linux'
+        run: npx --yes markdownlint-cli2
+      - name: Docs site builds
+        if: runner.os == 'Linux'
+        run: cd docs && npm ci && npm run build
+
+  # The oldest Rust the crate claims to build with (rust-version in Cargo.toml).
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read rust-version
+        id: msrv
+        run: echo "version=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+      - run: cargo build --locked

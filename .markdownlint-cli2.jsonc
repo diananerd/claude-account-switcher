@@ -1,0 +1,14 @@
+// Markdown lint for every .md file in the repository (CI runs it).
+{
+  "config": {
+    "default": true,
+    // Prose wraps at 80; table rows and code cannot wrap.
+    "MD013": { "line_length": 80, "tables": false, "code_blocks": false, "headings": false },
+    // Keep a Changelog repeats "Added" / "Fixed" under every version.
+    "MD024": { "siblings_only": true },
+    // Tables use `| --- |` separators.
+    "MD060": { "style": "leading_and_trailing" }
+  },
+  "globs": ["**/*.md"],
+  "ignores": ["**/node_modules/**", "target/**", "docs/.vitepress/**", "CLAUDE.md"]
+}

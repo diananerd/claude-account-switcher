@@ -1,0 +1,31 @@
+/* Terracotta accent. Text and button tones clear WCAG AA (>= 4.5:1) against
+   their backgrounds in both themes; the lighter tone is decoration only. */
+:root {
+  --vp-c-brand-1: #b4532e;
+  --vp-c-brand-2: #a8492a;
+  --vp-c-brand-3: #b4532e;
+  --vp-c-brand-soft: rgba(217, 119, 87, 0.14);
+  --vp-button-brand-bg: #b4532e;
+  --vp-button-brand-hover-bg: #a8492a;
+  --vp-button-brand-active-bg: #973f22;
+  --vp-button-brand-text: #ffffff;
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #b4532e 20%, #d97757);
+}
+
+.dark {
+  --vp-c-brand-1: #e8906c;
+  --vp-c-brand-2: #f0a585;
+  --vp-c-brand-3: #b4532e;
+  --vp-c-brand-soft: rgba(232, 144, 108, 0.16);
+  --vp-home-hero-name-background: linear-gradient(120deg, #e8906c 20%, #f0a585);
+}
+
+.VPHero .text {
+  letter-spacing: -0.02em;
+}
+
+/* Flags such as --json must not break across lines in the feature cards. */
+.VPFeature code {
+  white-space: nowrap;
+}

@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: musl toolchain
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Check the tag, versions and changelog agree
+        run: scripts/check-release.sh "$GITHUB_REF_NAME"
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Package
+        shell: bash
+        run: |
+          asset="claude-account-${{ matrix.target }}.tar.gz"
+          tar -czf "$asset" -C "target/${{ matrix.target }}/release" claude-account
+          shasum -a 256 "$asset" > "$asset.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: claude-account-${{ matrix.target }}.tar.gz*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=$(awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md)
+          # A tag with a suffix (v0.2.0-rc.1) is a pre-release: never "latest", so
+          # the installer and self-update keep offering the last stable one.
+          case "$GITHUB_REF_NAME" in *-*) pre=--prerelease ;; *) pre=--latest ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes "$notes" $pre
+
+  # Install and uninstall every published binary with the public one-liner.
+  smoke:
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    env:
+      CLAUDE_ACCOUNT_TARGET: ${{ matrix.target }}
+    steps:
+      - name: Rosetta for the Intel macOS binary
+        if: matrix.target == 'x86_64-apple-darwin'
+        run: arch -x86_64 /usr/bin/true || softwareupdate --install-rosetta --agree-to-license
+      - name: One-line install from the published release
+        run: |
+          export SHELL=/bin/bash
+          [ -n "$CLAUDE_ACCOUNT_TARGET" ] || unset CLAUDE_ACCOUNT_TARGET
+          curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/install.sh" | sh -s -- --version "$GITHUB_REF_NAME"
+          "$HOME/.local/bin/claude-account" --version | grep -F "${GITHUB_REF_NAME#v}"
+          file "$HOME/.local/bin/claude-account"
+          grep -F '>>> claude-account >>>' "$HOME/.bashrc"
+      - name: One-line uninstall
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/install.sh" | sh -s -- --uninstall --purge
+          test ! -e "$HOME/.local/bin/claude-account"
+          ! grep -F '>>> claude-account >>>' "$HOME/.bashrc"

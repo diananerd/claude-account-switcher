@@ -1,0 +1,13 @@
+{
+  "name": "claude-account",
+  "version": "0.1.0",
+  "description": "Show or switch the Claude Code account a project uses, and get told when a session runs under the wrong one. Needs the claude-account CLI.",
+  "author": {
+    "name": "Diana Nerd",
+    "url": "https://github.com/diananerd"
+  },
+  "homepage": "https://github.com/diananerd/claude-account-switcher",
+  "repository": "https://github.com/diananerd/claude-account-switcher",
+  "license": "MIT",
+  "keywords": ["accounts", "profiles", "multi-account", "config-dir"]
+}

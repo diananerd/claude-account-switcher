@@ -1,0 +1,25 @@
+# Claude Account Switcher
+
+> CLI that runs several Claude Code accounts on one machine and picks one per directory, by setting CLAUDE_CONFIG_DIR before launching `claude`. Unix-like (macOS tested, Linux, WSL).
+
+Key facts for an assistant helping a user:
+
+- A profile is a name for a Claude Code config dir with its own login, or an alias of another profile's login (`same_as`). The profile using `~/.claude` runs with CLAUDE_CONFIG_DIR unset.
+- `claude` (a shell function installed by the tool) resolves the profile of the current directory: nearest mapped ancestor wins; symlinks, letter case and git worktrees resolve to the same answer. Unmapped: a picker asks once and remembers it at the repository root.
+- A running session cannot change account. Change the mapping (`claude-account use <profile>`), then exit and run `claude --continue`.
+- Login is interactive (browser OAuth): the user runs `claude-account login <profile>` in their own terminal (an unknown name creates the profile first), or `/login` inside a session of that profile. Never run login for them.
+- Read state with `claude-account status --json` and `claude-account list --json`. Diagnose with `claude-account doctor` (also reports a newer release). Update with `claude-account self-update` (latest stable).
+- Config: `~/.config/claude-account/config.toml` (profiles, default, map). New accounts: `~/.local/share/claude-account/profiles/<name>`. Per-folder pin: a `.claude-account` file holding a profile name.
+
+## Docs
+
+- [Site](https://switcher.diananerd.com): guide and reference
+
+- [README](https://github.com/diananerd/claude-account-switcher/blob/main/README.md): install, setup, daily use
+- [Reference](https://github.com/diananerd/claude-account-switcher/blob/main/docs/reference.md): every command, file, variable, exit code
+- [AGENTS.md](https://github.com/diananerd/claude-account-switcher/blob/main/AGENTS.md): code map and invariants for contributors
+
+## Install
+
+- `curl -fsSL https://switcher.diananerd.com | sh`, then `claude-account setup`
+- Uninstall: `claude-account uninstall [--purge]`
