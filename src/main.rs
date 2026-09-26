@@ -74,7 +74,9 @@ enum Cmd {
 
     /// Map this project (or DIR) to a profile
     Use {
+        /// Profile name (asked in a terminal when omitted)
         profile: Option<String>,
+        /// Folder (default: the project you are in, i.e. the repository root or this folder)
         dir: Option<PathBuf>,
         /// Write a .claude-account file in the folder instead of the machine map
         #[arg(long)]
@@ -82,15 +84,22 @@ enum Cmd {
     },
     /// Remove this project's (or DIR's) own mapping
     Forget {
+        /// Folder (default: the project you are in, i.e. the repository root or this folder)
         dir: Option<PathBuf>,
         /// Remove the .claude-account file instead of the machine mapping
         #[arg(long)]
         local: bool,
     },
     /// Which profile applies here, and why
-    Status { dir: Option<PathBuf> },
+    Status {
+        /// Folder (default: the current folder)
+        dir: Option<PathBuf>,
+    },
     /// Print only the profile that applies here (empty when none does)
-    Resolve { dir: Option<PathBuf> },
+    Resolve {
+        /// Folder (default: the current folder)
+        dir: Option<PathBuf>,
+    },
     /// List mapped folders
     Map,
     /// Drop mappings to deleted folders
@@ -107,12 +116,16 @@ enum Cmd {
         check: bool,
     },
     /// Show or set the profile offered first in a folder with no profile
-    Default { profile: Option<String> },
+    Default {
+        /// Profile to make the default (without it: show it, or pick in a terminal)
+        profile: Option<String>,
+    },
     /// Create a profile: its own login, an alias (--same-as) or an existing dir
     New {
+        /// Name for the profile: lowercase letters, digits and dashes (asked in a terminal)
         name: Option<String>,
         /// Share the login of an existing profile
-        #[arg(long, conflicts_with_all = ["base", "dir"])]
+        #[arg(long, value_name = "PROFILE", conflicts_with_all = ["base", "dir"])]
         same_as: Option<String>,
         /// Adopt ~/.claude and whatever login it has
         #[arg(long, conflicts_with = "dir")]
@@ -126,16 +139,27 @@ enum Cmd {
     },
     /// Log a profile in; an unknown name creates it (extra args go to `claude auth login`, e.g. --sso)
     Login {
+        /// Profile to log in; a new name creates it (picked in a terminal when omitted)
         profile: Option<String>,
+        /// Passed to `claude auth login`, e.g. --sso or --email you@company.com
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<OsString>,
     },
     /// Log a profile out
-    Logout { profile: Option<String> },
+    Logout {
+        /// Profile to log out (picked in a terminal when omitted)
+        profile: Option<String>,
+    },
     /// Rename a profile (its login and mappings follow)
-    Rename { old: Option<String>, new: Option<String> },
-    /// Unregister a profile
+    Rename {
+        /// Current name (picked in a terminal when omitted)
+        old: Option<String>,
+        /// New name (asked in a terminal when omitted)
+        new: Option<String>,
+    },
+    /// Unregister a profile; its folder and login are kept unless --purge
     Remove {
+        /// Profile to remove (picked in a terminal when omitted)
         profile: Option<String>,
         /// Also drop the folders mapped to it
         #[arg(long)]
@@ -146,7 +170,9 @@ enum Cmd {
     },
     /// Launch claude with a profile, this time only
     Run {
+        /// Profile to run as (picked in a terminal when omitted)
         profile: Option<String>,
+        /// Everything after the profile goes to claude untouched
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<OsString>,
     },
@@ -170,8 +196,8 @@ enum Cmd {
     Hook { event: HookEvent },
     /// Update to the latest stable release (runs the official installer)
     SelfUpdate {
-        /// A specific release instead, e.g. v0.1.0
-        #[arg(long)]
+        /// A specific release instead, e.g. v0.1.0 (pre-releases too)
+        #[arg(long, value_name = "TAG")]
         version: Option<String>,
     },
     /// Remove the shell integration and this binary (--purge: profiles and config too)

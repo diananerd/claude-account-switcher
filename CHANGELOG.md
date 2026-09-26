@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-09-25
+
+### Fixed
+
+- Pre-releases compare in semver order: `self-update` and `doctor` no longer
+  call a pre-release "the latest stable release", the release that follows a
+  pre-release is offered as an update, and the installer calls it an upgrade.
+- `forget` with nothing to forget is a no-op (exit 0) that says what applies
+  instead, so scripts can run it unconditionally.
+- Every argument in `--help` says what it is and what happens when omitted.
+
+### Added
+
+- The acceptance suite runs every command's help, headless run and `--json`
+  output, reading the command list from `--help`.
+
 ## [0.1.0] - 2026-09-25
 
 First public release.

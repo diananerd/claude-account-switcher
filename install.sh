@@ -234,11 +234,18 @@ preflight() {
 
 on_path() { case ":$PATH:" in *":$1:"*) return 0 ;; *) return 1 ;; esac; }
 
-# version_cmp A B -> prints lt, eq or gt (numeric, dot-separated, x.y.z).
+# version_cmp A B -> prints lt, eq or gt, in semver order: x.y.z compared as
+# numbers, and a pre-release (x.y.z-rc.1) before its own release.
 version_cmp() {
   if [ "$1" = "$2" ]; then echo eq; return; fi
-  lowest=$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n -k3,3n | head -1)
-  if [ "$lowest" = "$1" ]; then echo lt; else echo gt; fi
+  a=${1%%-*}; b=${2%%-*}
+  if [ "$a" = "$b" ]; then
+    # Same numbers: the one without a suffix is the release, so it is greater.
+    case "$1" in *-*) echo lt ;; *) echo gt ;; esac
+    return
+  fi
+  lowest=$(printf '%s\n%s\n' "$a" "$b" | sort -t. -k1,1n -k2,2n -k3,3n | head -1)
+  if [ "$lowest" = "$a" ]; then echo lt; else echo gt; fi
 }
 
 # What is on this machine now, shown before anything happens.

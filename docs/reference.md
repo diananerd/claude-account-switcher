@@ -19,7 +19,7 @@ Global flags: `--no-input`, `-y/--yes` (answer yes to confirmations), `--json`
 | `claude-account` | Terminal: pick this project's profile (current preselected), or create one, or more actions. No terminal: same as `status`. | via `status` |
 | `setup [--name N] [--no-shell]` | Interactive: five steps (name the existing login, add accounts and log them in, pick the default, map folders, add the shell integration). Headless: `--name` adopts `~/.claude` under that name and adds the shell integration (unless `--no-shell`). Both end with the next steps. | |
 | `use [profile] [dir] [--local]` | Map `dir` (default: the current project root) to a profile. Asks for the profile when omitted and a terminal is present. `--local` writes `dir/.claude-account` instead. `claude-account <profile> [dir]` is a shorthand. | |
-| `forget [dir] [--local]` | Remove the mapping (or the `.claude-account` file) of `dir`, which may no longer exist. Fails if `dir` only inherits. | |
+| `forget [dir] [--local]` | Remove the mapping (or the `.claude-account` file) of `dir`, which may no longer exist. Nothing to forget (it only inherits, or has no mapping) is a no-op that says what applies instead. | |
 | `status [dir]` | Profile that applies, where it comes from, and the running session's profile when it differs. | yes |
 | `resolve [dir]` | Only the profile name (empty when none applies). | yes |
 | `map` | All mappings; flags deleted and unreachable folders. | yes |

@@ -45,13 +45,23 @@ fn disabled() -> bool {
     std::env::var_os("CLAUDE_ACCOUNT_NO_UPDATE_CHECK").is_some_and(|v| !v.is_empty())
 }
 
-/// `x.y.z` (a leading `v` allowed) as numbers; pre-release suffixes are not
-/// comparable here and yield None.
-fn parse(v: &str) -> Option<(u64, u64, u64)> {
+/// A version as (major, minor, patch, pre-release suffix); a leading `v` is
+/// allowed. `0.2.0-rc.1` is ((0, 2, 0), Some("rc.1")).
+type Version<'a> = ((u64, u64, u64), Option<&'a str>);
+
+fn parse(v: &str) -> Option<Version<'_>> {
     let v = v.trim().trim_start_matches('v');
-    let mut it = v.split('.');
-    let t = (it.next()?.parse().ok()?, it.next()?.parse().ok()?, it.next()?.parse().ok()?);
-    it.next().is_none().then_some(t)
+    let (core, pre) = match v.split_once('-') {
+        Some((c, p)) => (c, Some(p)),
+        None => (v, None),
+    };
+    let mut it = core.split('.');
+    let n = (it.next()?.parse().ok()?, it.next()?.parse().ok()?, it.next()?.parse().ok()?);
+    it.next().is_none().then_some((n, pre))
+}
+
+pub fn is_prerelease(v: &str) -> bool {
+    parse(v).is_some_and(|(_, pre)| pre.is_some())
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -61,10 +71,16 @@ pub enum Level {
     Major,
 }
 
-/// How far behind `current` is from `latest`, or None when it is not behind.
+/// How far `current` is behind the stable `latest`, or None when it is not.
+/// Semver order: a pre-release comes before its own release, so 0.2.0-rc.1 is
+/// behind 0.2.0 but ahead of 0.1.9. Pre-release `latest` values never count.
 pub fn behind(current: &str, latest: &str) -> Option<Level> {
-    let (c, l) = (parse(current)?, parse(latest)?);
-    if l <= c {
+    let ((c, cpre), (l, lpre)) = (parse(current)?, parse(latest)?);
+    if lpre.is_some() {
+        return None;
+    }
+    let newer = l > c || (l == c && cpre.is_some());
+    if !newer {
         return None;
     }
     Some(if l.0 != c.0 {
@@ -74,6 +90,21 @@ pub fn behind(current: &str, latest: &str) -> Option<Level> {
     } else {
         Level::Patch
     })
+}
+
+/// What to say about `current` next to the stable `latest`: (up to date, text).
+fn standing(current: &str, latest: &str) -> (bool, String) {
+    match behind(current, latest) {
+        Some(_) => (false, format!("claude-account {latest} is available (you have {current})")),
+        None if is_prerelease(current) => (
+            true,
+            format!(
+                "claude-account {current} is a pre-release, newer than the latest stable {latest}; \
+                 to go back to it: claude-account self-update --version v{latest}"
+            ),
+        ),
+        None => (true, format!("claude-account {current} is the latest stable release")),
+    }
 }
 
 /// Ask GitHub for the latest stable version (blocking, short timeout).
@@ -178,7 +209,12 @@ pub fn self_update(env: &Env, version: Option<String>, mode: crate::Mode) -> Res
     if version.is_none() {
         match fetch_latest() {
             Ok(latest) if behind(CURRENT, &latest).is_none() => {
-                ui::done(&format!("claude-account {CURRENT} is the latest stable release"));
+                let (_, text) = standing(CURRENT, &latest);
+                if is_prerelease(CURRENT) {
+                    ui::info(&text)
+                } else {
+                    ui::done(&text)
+                }
                 let _ = std::fs::remove_file(cache_file(env));
                 return Ok(ExitCode::SUCCESS);
             }
@@ -217,14 +253,10 @@ pub fn doctor_line() -> Option<(bool, String, Option<String>)> {
         return None;
     }
     Some(match fetch_latest() {
-        Ok(latest) => match behind(CURRENT, &latest) {
-            None => (true, format!("claude-account {CURRENT} is the latest stable release"), None),
-            Some(_) => (
-                false,
-                format!("claude-account {latest} is available (you have {CURRENT})"),
-                Some("claude-account self-update".into()),
-            ),
-        },
+        Ok(latest) => {
+            let (ok, text) = standing(CURRENT, &latest);
+            (ok, text, (!ok).then(|| "claude-account self-update".to_string()))
+        }
         Err(e) => (false, format!("could not check for updates ({e})"), Some("check your connection".into())),
     })
 }
@@ -242,5 +274,11 @@ mod tests {
         assert_eq!(behind("0.2.0", "0.1.9"), None);
         assert_eq!(behind("0.1.3", "0.2.0-rc.1"), None, "pre-releases are never offered");
         assert_eq!(behind("0.1.3", "garbage"), None);
+        // Running a pre-release: its own release is an update, older stables are not.
+        assert_eq!(behind("0.2.0-rc.1", "0.2.0"), Some(Level::Patch));
+        assert_eq!(behind("0.2.0-rc.1", "0.1.9"), None);
+        assert_eq!(behind("0.2.0-rc.1", "0.2.1"), Some(Level::Patch));
+        assert!(standing("0.2.0-rc.1", "0.1.9").1.contains("is a pre-release, newer than the latest stable 0.1.9"));
+        assert!(standing("0.1.9", "0.1.9").1.contains("is the latest stable release"));
     }
 }

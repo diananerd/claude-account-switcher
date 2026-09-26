@@ -72,28 +72,31 @@ pub fn forget(env: &Env, dir: Option<PathBuf>, local: bool) -> Result<ExitCode> 
         }
         (Err(e), None) => return Err(e),
     };
+    // Forgetting what is not there is a no-op, not an error: the end state the
+    // caller asked for already holds. Say what does apply instead.
     if local {
         let file = target.join(state::LOCAL_FILE);
         if !file.exists() {
-            return Err(format!("{} has no {}", env.tilde(&target), state::LOCAL_FILE));
+            println!("{} has no {}; nothing to forget", env.tilde(&target), state::LOCAL_FILE);
+            return Ok(ExitCode::SUCCESS);
         }
         fs::remove_file(&file).map_err(|e| format!("cannot remove {}: {e}", env.tilde(&file)))?;
     } else {
         if !cfg.map.contains_key(&target) {
-            return Err(match cfg.lookup(&target) {
-                Some(h) if h.source == Source::File && h.key == target => format!(
-                    "{} is pinned by {}; remove it with: claude-account forget --local",
-                    env.tilde(&target),
+            println!("{} has no mapping of its own; nothing to forget", env.tilde(&target));
+            match cfg.lookup(&target) {
+                Some(h) if h.source == Source::File && h.key == target => ui::hint(&format!(
+                    "it is pinned by {}; remove that with: claude-account forget --local",
                     state::LOCAL_FILE
-                ),
-                Some(h) => format!(
-                    "{} has no mapping of its own: it inherits {} from {}",
-                    env.tilde(&target),
+                )),
+                Some(h) => ui::hint(&format!(
+                    "it inherits {} from {}; change that there, or override it here with: claude-account use <profile>",
                     h.profile,
                     env.tilde(&h.key)
-                ),
-                None => format!("{} is not mapped", env.tilde(&target)),
-            });
+                )),
+                None => {}
+            }
+            return Ok(ExitCode::SUCCESS);
         }
         env.update(|c| {
             c.map.remove(&target);

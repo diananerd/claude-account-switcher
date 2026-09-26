@@ -327,8 +327,10 @@ fi
 
 if selected forget; then
   section "forget"
-  fails "forget: refuses an inherited dir" "$CA" forget "$W/sub"
-  want_has "forget: ...and says where it inherits from" "inherits work from ~/work" "$("$CA" forget "$W/sub" 2>&1)"
+  "$CA" forget "$W/sub" >/dev/null 2>&1; rc=$?
+  want "forget: an inherited dir is a no-op (exit 0)" "0" "$rc"
+  want_has "forget: ...that says where it inherits from" "inherits work from ~/work" "$("$CA" forget "$W/sub" 2>&1)"
+  want "forget: ...and changes nothing" "work" "$("$CA" resolve "$W/sub")"
   "$CA" forget "$W/client-proj" >/dev/null
   want "forget: removing an override restores the parent" "work" "$(acct_of "$W/client-proj/deep")"
   "$CA" use client "$W/client-proj" >/dev/null 2>&1
@@ -636,6 +638,42 @@ if selected update; then
   else skip "update: self-update" "no asset naming for this platform"; fi
 fi
 
+if selected matrix; then
+  section "every command: help, headless, json"
+  # Run with a 5 s limit and no terminal; prints "<exit code>" (124 on hang).
+  bounded() { ( "$@" </dev/null >"$SANDBOX/m.out" 2>"$SANDBOX/m.err" ) & local pid=$! i
+    for i in $(seq 1 50); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+    if kill -0 "$pid" 2>/dev/null; then kill "$pid"; wait "$pid" 2>/dev/null; echo 124; else wait "$pid"; echo $?; fi; }
+  cmds=$("$CA" --help | awk '/^Commands:/{f=1; next} /^$/{f=0} f {print $1}' | grep -v '^help$')
+  want_has "matrix: the command list is read from --help" "setup" "$cmds"
+  mkdir -p "$HOME/mx"
+  : > "$SANDBOX/matrix.txt"
+  for c in $cmds; do
+    rc=$(bounded "$CA" "$c" --help)
+    if [ "$rc" = 0 ] && grep -q '^Usage:' "$SANDBOX/m.out"; then ok "matrix: $c --help"; else bad "matrix: $c --help" "rc=$rc"; fi
+    case "$c" in
+      # These wait for input on stdin, run claude, or change the install: covered elsewhere.
+      launch|run|statusline|hook|init|completions|self-update|uninstall|refresh-update-cache) continue ;;
+    esac
+    rc=$(cd "$HOME/mx" && bounded "$CA" --no-input "$c")
+    printf '%-10s rc=%s  %s\n' "$c" "$rc" "$(head -1 "$SANDBOX/m.err" | sed 's/\x1b\[[0-9;]*m//g')" >> "$SANDBOX/matrix.txt"
+    case "$rc" in
+      0) ok "matrix: $c headless without arguments ends (0)" ;;
+      2) if grep -q -E 'usage:|^Usage:' "$SANDBOX/m.err"; then ok "matrix: $c headless without arguments is a usage error naming what to pass"
+         else bad "matrix: $c headless usage error" "$(cat "$SANDBOX/m.err")"; fi ;;
+      124) bad "matrix: $c headless without arguments hangs" "timed out" ;;
+      *) bad "matrix: $c headless without arguments" "rc=$rc $(cat "$SANDBOX/m.err")" ;;
+    esac
+  done
+  for c in status resolve map list default doctor "shell status"; do
+    # shellcheck disable=SC2086
+    rc=$(bounded "$CA" $c --json)
+    if [ "$rc" -le 1 ] && jq -e . "$SANDBOX/m.out" >/dev/null 2>&1; then ok "matrix: $c --json is valid JSON"
+    else bad "matrix: $c --json" "rc=$rc $(head -c 200 "$SANDBOX/m.out")"; fi
+  done
+  cp "$SANDBOX/matrix.txt" "${MATRIX_OUT:-/dev/null}" 2>/dev/null || true
+fi
+
 if selected integration; then
   section "status line and hook"
   want "integration: statusline shows the session's profile" "work" \
@@ -805,6 +843,8 @@ if selected install; then
       sh "$REPO/install.sh" > "$SANDBOX/iup.log" 2>&1
       printf '#!/bin/sh\necho "claude-account 99.0.0"\n' > "$HOME/.local/bin/claude-account"
       sh "$REPO/install.sh" > "$SANDBOX/idown.log" 2>&1
+      printf '#!/bin/sh\necho "claude-account %s-rc.1"\n' "$("$CA" --version | cut -d' ' -f2)" > "$HOME/.local/bin/claude-account"
+      sh "$REPO/install.sh" > "$SANDBOX/ipre.log" 2>&1
       grep -c '>>> claude-account >>>' "$HOME/.zshrc" > "$SANDBOX/i.blocks"
       cp "$HOME/.zshrc" "$SANDBOX/i.zshrc"
       (cd "$HOME" && ZDOTDIR="$HOME" zsh -ic 'whence -w claude; claude-account --version' > "$SANDBOX/i.shell" 2>&1)
@@ -837,6 +877,7 @@ if selected install; then
     want_has "install: an older installed version is an upgrade" "upgrade claude-account 0.0.1 ->" "$(cat "$SANDBOX/iup.log")"
     want_has "install: ...and says so when done" "Upgraded claude-account 0.0.1 ->" "$(cat "$SANDBOX/iup.log")"
     want_has "install: a newer installed version is a downgrade" "downgrade claude-account 99.0.0 ->" "$(cat "$SANDBOX/idown.log")"
+    want_has "install: the release after its own pre-release is an upgrade" "upgrade claude-account $CURRENT_V-rc.1 -> $CURRENT_V" "$(cat "$SANDBOX/ipre.log")"
     want_has "install: keeps the user's rc lines" "export MINE=1" "$(cat "$SANDBOX/i.zshrc")"
     want_has "install: a new zsh gets the claude function" "claude: function" "$(cat "$SANDBOX/i.shell")"
     want_has "install: ...and finds claude-account on PATH" "claude-account 0." "$(cat "$SANDBOX/i.shell")"
