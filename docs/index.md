@@ -17,7 +17,7 @@ features:
   - title: Per folder
     details: Map <code>~/work</code> to your work account and <code>~/personal</code> to yours. Subfolders inherit and can override; symlinks and git worktrees resolve the same way.
   - title: No more logging out
-    details: Each account keeps its own login side by side, while settings, skills, plugins and conversation history stay shared.
+    details: Each account keeps its own login side by side, and all of them use your one local setup, so switching never means configuring again.
   - title: Asks once
     details: In a new folder, <code>claude</code> asks which account to use and remembers it. Enter takes the default.
   - title: Interactive or headless
@@ -28,7 +28,7 @@ features:
 ## Quick start
 
 1. Install with the command above. It also adds `csw`, a short name for
-   `claude-account`.
+   `claude-switcher`.
 2. Run `csw setup`: name the account you are logged in to, add your other
    accounts, and map your folders.
 3. Run `claude` in any project. It uses that folder's account, and asks once

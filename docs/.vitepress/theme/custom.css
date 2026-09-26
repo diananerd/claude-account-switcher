@@ -29,3 +29,13 @@
 .VPFeature code {
   white-space: nowrap;
 }
+
+/* Inline code (flags such as -y, commands such as csw status) does not break
+   across lines where there is room. On phones it may, since a split beats
+   pushing the page sideways. */
+@media (min-width: 640px) {
+  .vp-doc p code,
+  .vp-doc li code {
+    white-space: nowrap;
+  }
+}

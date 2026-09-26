@@ -18,7 +18,7 @@ pub fn launch(env: &Env, args: Vec<OsString>, once: Option<String>) -> Result<Ex
     let cfg = match env.load() {
         Ok(c) => c,
         Err(e) if once.is_none() => {
-            eprintln!("claude-account: {e}\nclaude-account: launching claude unchanged; see: claude-account doctor");
+            eprintln!("claude-switcher: {e}\nclaude-switcher: launching claude unchanged; see: claude-switcher doctor");
             let mut cmd = claude::command();
             cmd.args(&args);
             return Err(claude::exec(cmd));
@@ -27,7 +27,7 @@ pub fn launch(env: &Env, args: Vec<OsString>, once: Option<String>) -> Result<Ex
     };
     // A CLAUDE_CONFIG_DIR set by hand, outside this tool, is honoured untouched.
     if once.is_none()
-        && std::env::var_os("CLAUDE_ACCOUNT").is_none()
+        && std::env::var_os("CLAUDE_SWITCHER_PROFILE").is_none()
         && let Some(dir) = std::env::var_os("CLAUDE_CONFIG_DIR")
         && paths::canonical(Path::new(&dir)).is_none_or(|c| cfg.profiles_for_dir(&c).is_empty())
     {
@@ -43,7 +43,7 @@ pub fn launch(env: &Env, args: Vec<OsString>, once: Option<String>) -> Result<Ex
             if let Some(h) = here.as_deref() {
                 for (dir, p) in cfg.ignored_pins(h) {
                     eprintln!(
-                        "claude-account: ignoring {}/{}: no profile named {p} here",
+                        "claude-switcher: ignoring {}/{}: no profile named {p} here",
                         env.tilde(&dir),
                         state::LOCAL_FILE
                     );
@@ -56,7 +56,7 @@ pub fn launch(env: &Env, args: Vec<OsString>, once: Option<String>) -> Result<Ex
                     // the user and claude. Run it untouched and point at setup.
                     let Some(def) = cfg.default_name() else {
                         eprintln!(
-                            "claude-account: no profiles yet, so claude runs as usual. Set them up: claude-account setup"
+                            "claude-switcher: no profiles yet, so claude runs as usual. Set them up: claude-switcher setup"
                         );
                         let mut cmd = claude::command();
                         cmd.args(&args);
@@ -70,9 +70,9 @@ pub fn launch(env: &Env, args: Vec<OsString>, once: Option<String>) -> Result<Ex
     // The picker may have just created the profile: read the config again.
     let cfg = env.load()?;
     require(&cfg, &name)?;
-    let dir = cfg.config_dir(&name).map_err(|e| format!("{e}\nRun: claude-account doctor"))?;
+    let dir = cfg.config_dir(&name).map_err(|e| format!("{e}\nRun: claude-switcher doctor"))?;
     let mut cmd = claude::command_for(env, &dir);
-    cmd.args(&args).env("CLAUDE_ACCOUNT", &name);
+    cmd.args(&args).env("CLAUDE_SWITCHER_PROFILE", &name);
     Err(claude::exec(cmd))
 }
 
@@ -96,7 +96,7 @@ fn pick_and_remember(env: &Env, cfg: &Config, def: &str) -> Result<String> {
     let here = cwd()?;
     let root = state::project_root(&here).unwrap_or(here);
     let prompt = format!("Claude Code account for {}", env.tilde(&root));
-    let name = match ui::pick(env, cfg, &prompt, Some(def), &["+ New profile"]).ok_or_else(aborted)? {
+    let name = match ui::pick(env, cfg, &prompt, Some(def), &["+ Add an account"]).ok_or_else(aborted)? {
         ui::Choice::Profile(p) => p,
         ui::Choice::Extra(_) => new_profile_here(env)?,
     };
@@ -107,12 +107,12 @@ fn pick_and_remember(env: &Env, cfg: &Config, def: &str) -> Result<String> {
             c.map.insert(root.clone(), name.clone());
             Ok(())
         })?;
-        eprintln!("Remembered: {} -> {name}. Change it with: claude-account", env.tilde(&root));
+        eprintln!("Remembered: {} -> {name}. Change it with: claude-switcher", env.tilde(&root));
     }
     Ok(name)
 }
 
-/// "+ New profile" in the first-launch picker: create it and, when it has a login
+/// "+ Add an account" in the first-launch picker: create it and, when it has a login
 /// of its own, log it in before claude starts with it.
 fn new_profile_here(env: &Env) -> Result<String> {
     let name = profiles::create(env, None, None, false, None, true)?;
@@ -162,9 +162,9 @@ pub fn hook_session_start(env: &Env) -> Result<ExitCode> {
         && cur != hit.profile
     {
         println!(
-            "claude-account: this session runs as profile \"{cur}\", but {} resolves to \"{}\". \
+            "claude-switcher: this session runs as profile \"{cur}\", but {} resolves to \"{}\". \
              Mention it to the user once: to switch, they exit and run `claude --continue` \
-             from a shell with the claude-account integration.",
+             from a shell with the claude-switcher integration.",
             dir.display(),
             hit.profile
         );

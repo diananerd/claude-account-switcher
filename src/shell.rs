@@ -1,5 +1,5 @@
 //! Shell integration: the `claude` function that routes every launch through
-//! `claude-account launch`, and the marked block that loads it from rc files.
+//! `claude-switcher launch`, and the marked block that loads it from rc files.
 //!
 //! Rc files are edited only between the markers below, in place when a block is
 //! already there, so installing twice changes nothing and uninstalling leaves
@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 
 use crate::state::{Env, Result};
 
-pub const BEGIN: &str = "# >>> claude-account >>>";
-pub const END: &str = "# <<< claude-account <<<";
+pub const BEGIN: &str = "# >>> claude-switcher >>>";
+pub const END: &str = "# <<< claude-switcher <<<";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Shell {
@@ -44,7 +44,7 @@ impl Shell {
     }
 }
 
-/// What `claude-account init <shell>` prints.
+/// What `claude-switcher init <shell>` prints.
 ///
 /// An existing `alias claude=<path>` (older Claude Code installs add one) would
 /// shadow the function, or in zsh break its definition; the alias is removed and
@@ -54,21 +54,21 @@ pub fn function(shell: Shell) -> &'static str {
     match shell {
         Shell::Zsh => {
             "if (( ${+aliases[claude]} )); then\n\
-             \x20 [[ ${aliases[claude]} == *[[:space:]]* ]] || eval \"export CLAUDE_ACCOUNT_CLAUDE=${aliases[claude]}\"\n\
+             \x20 [[ ${aliases[claude]} == *[[:space:]]* ]] || eval \"export CLAUDE_SWITCHER_CLAUDE=${aliases[claude]}\"\n\
              \x20 unalias claude\n\
              fi\n\
-             function claude { command claude-account launch \"$@\"; }"
+             function claude { command claude-switcher launch \"$@\"; }"
         }
         Shell::Bash => {
             "if _ca_alias=$(alias claude 2>/dev/null); then\n\
              \x20 _ca_alias=${_ca_alias#alias claude=}; _ca_alias=${_ca_alias#\\'}; _ca_alias=${_ca_alias%\\'}\n\
-             \x20 case $_ca_alias in *[[:space:]]*) ;; *) eval \"export CLAUDE_ACCOUNT_CLAUDE=$_ca_alias\" ;; esac\n\
+             \x20 case $_ca_alias in *[[:space:]]*) ;; *) eval \"export CLAUDE_SWITCHER_CLAUDE=$_ca_alias\" ;; esac\n\
              \x20 unalias claude\n\
              fi\n\
              unset _ca_alias\n\
-             function claude { command claude-account launch \"$@\"; }"
+             function claude { command claude-switcher launch \"$@\"; }"
         }
-        Shell::Fish => "function claude --wraps claude\n    command claude-account launch $argv\nend",
+        Shell::Fish => "function claude --wraps claude\n    command claude-switcher launch $argv\nend",
     }
 }
 
@@ -103,7 +103,7 @@ pub fn rc_files(env: &Env, shell: Shell) -> Vec<PathBuf> {
                 .map(PathBuf::from)
                 .filter(|p| p.is_absolute())
                 .unwrap_or_else(|| env.home.join(".config"));
-            vec![cfg.join("fish/conf.d/claude-account.fish")]
+            vec![cfg.join("fish/conf.d/claude-switcher.fish")]
         }
     }
 }
@@ -132,7 +132,7 @@ fn path_literal(shell: Shell, dir: &Path, homes: &[&Path]) -> String {
 
 fn block(shell: Shell, path_dir: Option<&Path>, homes: &[&Path]) -> String {
     let mut lines =
-        vec![BEGIN.to_string(), "# Managed by claude-account; remove with `claude-account shell uninstall`.".into()];
+        vec![BEGIN.to_string(), "# Managed by claude-switcher; remove with `claude-switcher shell uninstall`.".into()];
     match shell {
         Shell::Zsh | Shell::Bash => {
             if let Some(d) = path_dir {
@@ -145,7 +145,7 @@ fn block(shell: Shell, path_dir: Option<&Path>, homes: &[&Path]) -> String {
                 lines.push(format!("case \":$PATH:\" in *:{q}:*) ;; *) {export} ;; esac"));
             }
             lines.push(format!(
-                "if command -v claude-account >/dev/null 2>&1; then eval \"$(claude-account init {})\"; fi",
+                "if command -v claude-switcher >/dev/null 2>&1; then eval \"$(claude-switcher init {})\"; fi",
                 shell.name()
             ));
         }
@@ -153,7 +153,7 @@ fn block(shell: Shell, path_dir: Option<&Path>, homes: &[&Path]) -> String {
             if let Some(d) = path_dir {
                 lines.push(format!("fish_add_path --global --path {}", path_literal(shell, d, homes)));
             }
-            lines.push("if type -q claude-account; claude-account init fish | source; end".into());
+            lines.push("if type -q claude-switcher; claude-switcher init fish | source; end".into());
         }
     }
     lines.push(END.into());
@@ -206,7 +206,7 @@ fn write_preserving(path: &Path, text: &str) -> Result<()> {
     // Follow a symlinked rc file (dotfile managers) instead of replacing the link.
     let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let perms = fs::metadata(&target).ok().map(|m| m.permissions());
-    let tmp = target.with_extension(format!("claude-account.{}", std::process::id()));
+    let tmp = target.with_extension(format!("claude-switcher.{}", std::process::id()));
     fs::write(&tmp, text).map_err(|e| format!("cannot write {}: {e}", target.display()))?;
     if let Some(p) = perms {
         let _ = fs::set_permissions(&tmp, p);
@@ -333,7 +333,7 @@ mod tests {
     fn block_only_adds_path_when_asked() {
         assert!(!block(Shell::Zsh, None, &[]).contains("PATH"));
         assert!(block(Shell::Bash, Some(Path::new("/o p/bin")), &[]).contains("export PATH='/o p/bin'\":$PATH\""));
-        assert!(block(Shell::Fish, None, &[]).contains("claude-account init fish | source"));
+        assert!(block(Shell::Fish, None, &[]).contains("claude-switcher init fish | source"));
         let home = Path::new("/Users/you");
         assert!(
             block(Shell::Zsh, Some(Path::new("/Users/you/.local/bin")), &[home])

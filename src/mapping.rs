@@ -34,7 +34,7 @@ pub fn use_profile(
             ui::pick_profile(env, &cfg, &format!("Profile for {}", env.tilde(&target)), current.as_deref())
                 .ok_or_else(aborted)?
         }
-        None => return Err("usage: claude-account use <profile> [dir]".into()),
+        None => return Err("usage: claude-switcher use <profile> [dir]".into()),
     };
     require(&cfg, &name)?;
     if local {
@@ -86,11 +86,11 @@ pub fn forget(env: &Env, dir: Option<PathBuf>, local: bool) -> Result<ExitCode> 
             println!("{} has no mapping of its own; nothing to forget", env.tilde(&target));
             match cfg.lookup(&target) {
                 Some(h) if h.source == Source::File && h.key == target => ui::hint(&format!(
-                    "it is pinned by {}; remove that with: claude-account forget --local",
+                    "it is pinned by {}; remove that with: claude-switcher forget --local",
                     state::LOCAL_FILE
                 )),
                 Some(h) => ui::hint(&format!(
-                    "it inherits {} from {}; change that there, or override it here with: claude-account use <profile>",
+                    "it inherits {} from {}; change that there, or override it here with: claude-switcher use <profile>",
                     h.profile,
                     env.tilde(&h.key)
                 )),
@@ -141,7 +141,7 @@ pub fn status(env: &Env, dir: Option<PathBuf>, json: bool) -> Result<ExitCode> {
         }
         None => match cfg.default_name() {
             Some(d) => println!("Profile:   not mapped; the picker will offer {d}"),
-            None => println!("Profile:   none yet; run: claude-account setup"),
+            None => println!("Profile:   none yet; run: claude-switcher setup"),
         },
     }
     if let (Some(s), Some(h)) = (&session, &hit)
@@ -176,7 +176,7 @@ pub fn map(env: &Env, json: bool) -> Result<ExitCode> {
     for (k, v) in &cfg.map {
         let note = match state::reach(k) {
             state::Reach::Present => "",
-            state::Reach::Deleted => "  (deleted; see: claude-account prune)",
+            state::Reach::Deleted => "  (deleted; see: claude-switcher prune)",
             state::Reach::Unreachable => "  (not reachable: unmounted volume or moved parent?)",
         };
         println!("{v:width$}  {}{note}", env.tilde(k));

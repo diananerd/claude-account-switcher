@@ -1,19 +1,19 @@
 #!/bin/bash
-# End-to-end acceptance tests for claude-account, black-box: they only run the
+# End-to-end acceptance tests for claude-switcher, black-box: they only run the
 # binary (and the installer) and look at what a fake `claude` receives. Every case
 # runs against a throwaway HOME, so real accounts are never touched. Interactive
 # cases drive a real pseudo-terminal through expect(1).
 #
 #   tests/acceptance.sh            everything (builds the release binary first)
 #   tests/acceptance.sh picker     only sections whose name matches
-#   CA=/path/to/claude-account tests/acceptance.sh   test another build
+#   CA=/path/to/claude-switcher tests/acceptance.sh   test another build
 
 set -u -o pipefail
 
 REPO=$(cd -P "$(dirname "$0")/.." && pwd)
 if [ -z "${CA:-}" ]; then
   (cd "$REPO" && cargo build --release --quiet) || exit 1
-  CA="$REPO/target/release/claude-account"
+  CA="$REPO/target/release/claude-switcher"
 fi
 CA=$(cd -P "$(dirname "$CA")" && pwd)/$(basename "$CA")
 FILTER="${1:-}"
@@ -21,12 +21,12 @@ PASS=0; FAIL=0; SKIP=0; FAILED=""
 
 # The default TMPDIR on macOS sits under /var, itself a symlink to /private/var,
 # so every path below is reached through a real symlink for free.
-SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/claude-account-test.XXXXXX")
+SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/claude-switcher-test.XXXXXX")
 trap 'rm -rf "$SANDBOX"' EXIT
 
 export HOME="$SANDBOX/home" SHELL=/bin/zsh
-unset CLAUDE_CONFIG_DIR CLAUDE_ACCOUNT CLAUDE_ACCOUNT_NO_INPUT CLAUDE_ACCOUNT_CONFIG CLAUDE_ACCOUNT_BASE_DIR \
-      CLAUDE_ACCOUNT_CLAUDE CLAUDECODE XDG_CONFIG_HOME XDG_DATA_HOME ZDOTDIR
+unset CLAUDE_CONFIG_DIR CLAUDE_SWITCHER_PROFILE CLAUDE_SWITCHER_NO_INPUT CLAUDE_SWITCHER_CONFIG CLAUDE_SWITCHER_BASE_DIR \
+      CLAUDE_SWITCHER_CLAUDE CLAUDECODE XDG_CONFIG_HOME XDG_DATA_HOME ZDOTDIR
 mkdir -p "$HOME/.claude" "$SANDBOX/bin"
 export GIT_CONFIG_GLOBAL="$SANDBOX/gitconfig" GIT_CONFIG_NOSYSTEM=1
 git config --global user.name test; git config --global user.email test@example.com
@@ -41,7 +41,7 @@ dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 json="$HOME/.claude.json"; if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then json="$CLAUDE_CONFIG_DIR/.claude.json"; fi
 if [ "${1:-}" = "--version" ]; then echo "9.9.9 (Claude Code)"; exit 0; fi
 if [ "${1:-}" = "--help" ]; then
-  echo "CFG=${CLAUDE_CONFIG_DIR-<unset>} ACCT=${CLAUDE_ACCOUNT-<unset>} ARGS=$*"
+  echo "CFG=${CLAUDE_CONFIG_DIR-<unset>} ACCT=${CLAUDE_SWITCHER_PROFILE-<unset>} ARGS=$*"
   printf 'Usage: claude [options] [command] [prompt]\n\nCommands:\n  auth  Manage auth\n  update|upgrade  Update\n  mcp  MCP\n'
   exit 0
 fi
@@ -62,7 +62,7 @@ case "${1:-} ${2:-}" in
     rm -f "$dir/.fake-login"
     t=$(mktemp); jq 'del(.oauthAccount)' "$json" > "$t" 2>/dev/null && mv "$t" "$json"
     echo "Logged out" ;;
-  *) echo "CFG=${CLAUDE_CONFIG_DIR-<unset>} ACCT=${CLAUDE_ACCOUNT-<unset>} ARGS=$*" ;;
+  *) echo "CFG=${CLAUDE_CONFIG_DIR-<unset>} ACCT=${CLAUDE_SWITCHER_PROFILE-<unset>} ARGS=$*" ;;
 esac
 EOF
 chmod +x "$SANDBOX/bin/claude"
@@ -71,7 +71,7 @@ export PATH="$SANDBOX/bin:$(dirname "$CA"):$PATH"
 CURRENT_V=$("$CA" --version | cut -d' ' -f2)
 latest_is() { printf '{"tag_name":"v%s"}' "$1" > "$SANDBOX/latest.json"; }
 latest_is "$CURRENT_V"
-export CLAUDE_ACCOUNT_UPDATE_URL="file://$SANDBOX/latest.json"
+export CLAUDE_SWITCHER_UPDATE_URL="file://$SANDBOX/latest.json"
 
 cat > "$HOME/.claude.json" <<'EOF'
 {"oauthAccount":{"emailAddress":"work@example.com"},"hasCompletedOnboarding":true,
@@ -117,7 +117,7 @@ cd $env(DIR)
 spawn -noecho {*}$cmd
 if {[llength $keys] > 0} {
   expect {
-    -re {account for|Profile for|What is|Profile name|Default profile|Name for this|Log .* in|already logged|There is no profile|Cancel|Continue\?|which profile\?|Which shell|Fix [0-9]|Drop these|Run claude once|New name} {}
+    -re {account for|Profile for|What is|Profile name|Default profile|Name for this|Log .* in|already logged|There is no account|Cancel|Continue\?|which profile\?|Which shell|Fix [0-9]|Drop these|Run claude once|New name} {}
     timeout { puts "\n<<timeout waiting for a prompt>>" }
     eof { puts "\n<<eof before a prompt>>" }
   }
@@ -158,9 +158,9 @@ mkdir -p "$HOME/wt/feature/pkg"
 git init -q --bare "$HOME/bare.git"
 git -C "$HOME/bare.git" worktree add -q --orphan "$HOME/bt" 2>/dev/null || true
 
-"$CA" new work --base >/dev/null
-"$CA" new client --no-login >/dev/null
-"$CA" new personal --same-as work >/dev/null
+"$CA" add work --base >/dev/null
+"$CA" add client --no-login >/dev/null
+"$CA" add personal --same-as work >/dev/null
 "$CA" default personal >/dev/null
 "$CA" use work "$W" >/dev/null 2>&1
 "$CA" use client "$W/client-proj" >/dev/null 2>&1
@@ -168,18 +168,18 @@ git -C "$HOME/bare.git" worktree add -q --orphan "$HOME/bt" 2>/dev/null || true
 "$CA" use personal "$HOME/personal" >/dev/null 2>&1
 if [ -d "$HOME/bt" ]; then "$CA" use client "$HOME/bare.git" >/dev/null 2>&1; fi
 CLIENT_DIR=$("$CA" list --json | jq -r '.[] | select(.name == "client") | .config_dir')
-CONFIG="$HOME/.config/claude-account/config.toml"
+CONFIG="$HOME/.config/claude-switcher/config.toml"
 
 # ------------------------------------------------------------------ cases
 
 if selected profiles; then
   section "profiles"
   want "profiles: the config follows XDG" "yes" "$([ -f "$CONFIG" ] && echo yes)"
-  want "profiles: managed dirs live under XDG data" "$(canon "$HOME/.local/share/claude-account/profiles/client")" "$CLIENT_DIR"
+  want "profiles: managed dirs live under XDG data" "$(canon "$HOME/.local/share/claude-switcher/profiles/client")" "$CLIENT_DIR"
   want "profiles: base profile runs with CLAUDE_CONFIG_DIR unset" "<unset>" "$(cfg_of "$W")"
   want "profiles: own profile gets its canonical config dir" "$CLIENT_DIR" "$(cfg_of "$W/client-proj")"
   want "profiles: alias of the base also runs unset" "<unset>" "$(cfg_of "$HOME/personal/projects/a")"
-  want "profiles: CLAUDE_ACCOUNT names the alias, not its target" "personal" "$(acct_of "$HOME/personal/projects/a")"
+  want "profiles: CLAUDE_SWITCHER_PROFILE names the alias, not its target" "personal" "$(acct_of "$HOME/personal/projects/a")"
   want_has "profiles: list marks the default first" "personal" "$("$CA" list | head -1)"
   want_has "profiles: list shows aliases" "same login as work" "$("$CA" list | grep '^personal')"
   want "profiles: list --json" "personal,client,work" "$("$CA" list --json | jq -r '[.[].name] | join(",")')"
@@ -192,13 +192,13 @@ if selected profiles; then
   want "profiles: shared settings.json links to the base" "$HOME/.claude/settings.json" "$(readlink "$CLIENT_DIR/settings.json")"
   want "profiles: missing shared dirs are created in the base and linked" "$HOME/.claude/agents" "$(readlink "$CLIENT_DIR/agents")"
   for n in Upper list -dash 'a b' '' setup "$(printf 'x%.0s' $(seq 41))"; do
-    fails "profiles: rejects name \"${n:0:12}\"" "$CA" new "$n" --no-login
+    fails "profiles: rejects name \"${n:0:12}\"" "$CA" add "$n" --no-login
   done
-  fails "profiles: rejects duplicates" "$CA" new client --no-login
-  fails "profiles: alias of a missing profile fails" "$CA" new ghost --same-as nobody
+  fails "profiles: rejects duplicates" "$CA" add client --no-login
+  fails "profiles: alias of a missing profile fails" "$CA" add ghost --same-as nobody
   want "profiles: a failed new leaves nothing behind" "" "$(profile_json ghost)"
-  fails "profiles: a config dir cannot be adopted twice" "$CA" new other --base
-  fails "profiles: new without a name and no terminal fails" "$CA" new --no-input
+  fails "profiles: a config dir cannot be adopted twice" "$CA" add other --base
+  fails "profiles: add without a name and no terminal fails" "$CA" add --no-input
 fi
 
 if selected inherit; then
@@ -213,26 +213,26 @@ if selected inherit; then
 fi
 
 if selected local; then
-  section "local .claude-account files"
+  section "local .claude-switcher files"
   mkdir -p "$W/pinned/inner" "$W/pinned-bad"
-  printf '# pinned for this repo\n\nclient\n' > "$W/pinned/.claude-account"
-  want "local: a .claude-account file pins its tree" "client" "$(acct_of "$W/pinned/inner")"
-  want "local: status names the file" "Source:    pinned by ~/work/pinned/.claude-account" "$("$CA" status "$W/pinned/inner" | grep Source)"
+  printf '# pinned for this repo\n\nclient\n' > "$W/pinned/.claude-switcher"
+  want "local: a .claude-switcher file pins its tree" "client" "$(acct_of "$W/pinned/inner")"
+  want "local: status names the file" "Source:    pinned by ~/work/pinned/.claude-switcher" "$("$CA" status "$W/pinned/inner" | grep Source)"
   "$CA" use work "$W/pinned" >/dev/null 2>&1
   want "local: the machine map overrides a file at the same level" "work" "$(acct_of "$W/pinned/inner")"
   "$CA" forget "$W/pinned" >/dev/null
-  echo nobody > "$W/pinned-bad/.claude-account"
+  echo nobody > "$W/pinned-bad/.claude-switcher"
   out=$(cd "$W/pinned-bad" && "$CA" launch -p x 2>&1)
-  want_has "local: a file naming an unknown profile is ignored with a warning" "ignoring ~/work/pinned-bad/.claude-account" "$out"
+  want_has "local: a file naming an unknown profile is ignored with a warning" "ignoring ~/work/pinned-bad/.claude-switcher" "$out"
   want_has "local: ...and never blocks claude (falls back to the parent)" "ACCT=work" "$out"
   want_has "local: doctor points at it" "names nobody, which does not exist here" "$(cd "$W/pinned-bad" && "$CA" doctor 2>&1)"
-  rm "$W/pinned-bad/.claude-account"
+  rm "$W/pinned-bad/.claude-switcher"
   mkdir -p "$W/pin-me"
   "$CA" use client "$W/pin-me" --local >/dev/null 2>&1
-  want "local: use --local writes the file" "client" "$(cat "$W/pin-me/.claude-account")"
+  want "local: use --local writes the file" "client" "$(cat "$W/pin-me/.claude-switcher")"
   want "local: ...and the map is untouched" "" "$(mapped_to client | grep pin-me)"
   "$CA" forget --local "$W/pin-me" >/dev/null
-  want "local: forget --local removes it" "no" "$([ -e "$W/pin-me/.claude-account" ] && echo yes || echo no)"
+  want "local: forget --local removes it" "no" "$([ -e "$W/pin-me/.claude-switcher" ] && echo yes || echo no)"
 fi
 
 if selected symlink; then
@@ -294,9 +294,9 @@ if selected env; then
     "$CA" setup > "$SANDBOX/hs0.log" 2>&1; echo $? > "$SANDBOX/hs0.rc"
     "$CA" setup --name main > "$SANDBOX/hs1.log" 2>&1; echo $? > "$SANDBOX/hs1.rc"
     "$CA" setup --name main > "$SANDBOX/hs2.log" 2>&1; echo $? > "$SANDBOX/hs2.rc"
-    grep -c '>>> claude-account >>>' "$HOME/.zshrc" > "$SANDBOX/hs.blocks"
+    grep -c '>>> claude-switcher >>>' "$HOME/.zshrc" > "$SANDBOX/hs.blocks"
     "$CA" list --json | jq -r '.[0].name + " " + (.[0].base|tostring) + " " + (.[0].default|tostring)' > "$SANDBOX/hs.list"
-    mkdir -p "$HOME/p"; (cd "$HOME/p" && rm -f "$HOME/.config/claude-account/config.toml" && "$CA" launch -p x > "$SANDBOX/hs.launch" 2>&1)
+    mkdir -p "$HOME/p"; (cd "$HOME/p" && rm -f "$HOME/.config/claude-switcher/config.toml" && "$CA" launch -p x > "$SANDBOX/hs.launch" 2>&1)
   )
   want "env: headless setup without --name is a usage error" "2" "$(cat "$SANDBOX/hs0.rc")"
   want_has "env: ...naming the flag" "setup --name" "$(cat "$SANDBOX/hs0.log")"
@@ -304,10 +304,10 @@ if selected env; then
   want_has "env: ...adds the shell integration and says what next" "Next steps" "$(cat "$SANDBOX/hs1.log")"
   want "env: headless setup is idempotent" "0 1" "$(cat "$SANDBOX/hs2.rc") $(cat "$SANDBOX/hs.blocks")"
   want_has "env: with no profiles at all, claude still runs" "ARGS=-p x" "$(cat "$SANDBOX/hs.launch")"
-  want_has "env: ...and points at setup" "claude-account setup" "$(cat "$SANDBOX/hs.launch")"
+  want_has "env: ...and points at setup" "claude-switcher setup" "$(cat "$SANDBOX/hs.launch")"
   mkdir -p "$HOME/short"
   "$CA" client "$HOME/short" >/dev/null 2>&1
-  want "env: claude-account <profile> [dir] is short for use" "client" "$("$CA" resolve "$HOME/short")"
+  want "env: claude-switcher <profile> [dir] is short for use" "client" "$("$CA" resolve "$HOME/short")"
   fails "env: unknown words are errors" "$CA" nosuchthing
   want_has "env: mapping HOME warns that it covers everything" "contains your home folder" "$("$CA" use personal "$HOME" 2>&1)"
   "$CA" forget "$HOME" >/dev/null
@@ -346,22 +346,22 @@ if selected lifecycle; then
   want_has "lifecycle: login passes extra args (--sso)" "ARGS=auth login --sso" "$("$CA" login client --sso </dev/null 2>&1)"
   want_has "lifecycle: logging an alias in logs its owner in" "personal uses the login of work" \
     "$(FAKE_LOGIN_EMAIL=work@example.com "$CA" login personal </dev/null 2>&1)"
-  "$CA" new dup --no-login >/dev/null
+  "$CA" add dup --no-login >/dev/null
   want_has "lifecycle: two profiles on one account are flagged" "client is logged in to the same account" \
     "$(FAKE_LOGIN_EMAIL=client@example.com "$CA" login dup </dev/null 2>&1)"
   want_has "lifecycle: a failed login fails" "did not complete" "$(FAKE_LOGIN_FAIL=1 "$CA" login dup </dev/null 2>&1)"
   out=$("$CA" login brandnew </dev/null 2>&1)
-  want_has "lifecycle: login of an unknown profile without a terminal says how to create it" "claude-account new brandnew" "$out"
+  want_has "lifecycle: login of an unknown profile without a terminal says how to create it" "claude-switcher add brandnew" "$out"
   want "lifecycle: ...and creates nothing" "" "$(profile_json brandnew)"
   want_has "lifecycle: login without a terminal warns about pasting codes" "No terminal on stdin" "$("$CA" login dup </dev/null 2>&1)"
   want_has "lifecycle: a missing claude is named, with where to get it" "not found. Install Claude Code" \
-    "$(CLAUDE_ACCOUNT_CLAUDE=/nonexistent/claude "$CA" run client -p x 2>&1)"
+    "$(CLAUDE_SWITCHER_CLAUDE=/nonexistent/claude "$CA" run client -p x 2>&1)"
   want_has "lifecycle: ...also for login" "not found. Install Claude Code" \
-    "$(CLAUDE_ACCOUNT_CLAUDE=/nonexistent/claude "$CA" login client </dev/null 2>&1)"
+    "$(CLAUDE_SWITCHER_CLAUDE=/nonexistent/claude "$CA" login client </dev/null 2>&1)"
   "$CA" logout dup >/dev/null 2>&1
   want "lifecycle: logout" "false" "$("$CA" list --check --json | jq -r '.[] | select(.name == "dup") | .logged_in')"
   "$CA" use dup "$HOME/short" >/dev/null 2>&1
-  "$CA" new dup-alias --same-as dup >/dev/null
+  "$CA" add dup-alias --same-as dup >/dev/null
   "$CA" rename dup twin >/dev/null 2>&1
   want "lifecycle: rename moves mappings" "twin" "$("$CA" resolve "$HOME/short")"
   want "lifecycle: rename re-points aliases" "twin" "$(profile_json dup-alias | jq -r .same_as)"
@@ -375,24 +375,24 @@ if selected lifecycle; then
   want "lifecycle: remove keeps the dir without --purge" "yes" "$([ -d "$twin_dir" ] && echo yes)"
   want "lifecycle: ...and drops its mappings" "" "$("$CA" resolve "$HOME/short")"
   # twin was renamed from dup: its dir keeps the name dup (the login is keyed to the path).
-  want_has "lifecycle: new over a leftover dir suggests reusing it" "Reuse it with: claude-account new dup --dir" \
-    "$("$CA" new dup --no-login 2>&1)"
-  "$CA" new twin --dir "$twin_dir" --no-login >/dev/null 2>&1
+  want_has "lifecycle: new over a leftover dir suggests reusing it" "Reuse it with: claude-switcher add dup --dir" \
+    "$("$CA" add dup --no-login 2>&1)"
+  "$CA" add twin --dir "$twin_dir" --no-login >/dev/null 2>&1
   want "lifecycle: ...and --dir reuses it" "$twin_dir" "$(profile_json twin | jq -r .config_dir)"
   "$CA" remove twin >/dev/null 2>&1
-  "$CA" new vanish --no-login >/dev/null; mkdir -p "$HOME/vanish-here"; "$CA" use vanish "$HOME/vanish-here" >/dev/null 2>&1
+  "$CA" add vanish --no-login >/dev/null; mkdir -p "$HOME/vanish-here"; "$CA" use vanish "$HOME/vanish-here" >/dev/null 2>&1
   rm -rf "$(profile_json vanish | jq -r .config_dir)"
-  want_has "lifecycle: a profile whose dir was deleted points to doctor" "claude-account doctor" "$(launch_in "$HOME/vanish-here")"
+  want_has "lifecycle: a profile whose dir was deleted points to doctor" "claude-switcher doctor" "$(launch_in "$HOME/vanish-here")"
   "$CA" doctor >/dev/null 2>&1; rc=$?
   want "lifecycle: ...and doctor fails on it" "1" "$rc"
   "$CA" remove vanish --force >/dev/null 2>&1
   want "lifecycle: ...and it can still be removed" "" "$(profile_json vanish)"
-  "$CA" new gone --no-login >/dev/null; "$CA" login gone </dev/null >/dev/null 2>&1
+  "$CA" add gone --no-login >/dev/null; "$CA" login gone </dev/null >/dev/null 2>&1
   gone_dir=$(profile_json gone | jq -r .config_dir)
   "$CA" remove gone --purge --yes >/dev/null 2>&1
   want "lifecycle: remove --purge deletes a managed dir" "no" "$([ -d "$gone_dir" ] && echo yes || echo no)"
   mkdir -p "$HOME/external-cfg"
-  "$CA" new adopted --dir "$HOME/external-cfg" >/dev/null 2>&1
+  "$CA" add adopted --dir "$HOME/external-cfg" >/dev/null 2>&1
   want "lifecycle: new --dir adopts an existing config dir" "$(canon "$HOME/external-cfg")" "$(profile_json adopted | jq -r .config_dir)"
   echo adopted@example.com > "$HOME/external-cfg/.fake-login"
   out=$("$CA" remove adopted --purge --yes 2>&1)
@@ -429,10 +429,10 @@ if selected shell; then
   printf 'export KEEP=1\nalias ll=ls\n' > "$HOME/.zshrc"
   "$CA" shell install zsh >/dev/null 2>&1
   "$CA" shell install zsh >/dev/null 2>&1
-  want "shell: install is idempotent (one block)" "1" "$(grep -c '>>> claude-account >>>' "$HOME/.zshrc")"
+  want "shell: install is idempotent (one block)" "1" "$(grep -c '>>> claude-switcher >>>' "$HOME/.zshrc")"
   want_has "shell: keeps the rest of the rc file" "alias ll=ls" "$(cat "$HOME/.zshrc")"
   "$CA" shell install zsh --path-dir "/opt/ca bin" >/dev/null 2>&1
-  want "shell: a changed block is replaced in place" "1" "$(grep -c '>>> claude-account >>>' "$HOME/.zshrc")"
+  want "shell: a changed block is replaced in place" "1" "$(grep -c '>>> claude-switcher >>>' "$HOME/.zshrc")"
   want_has "shell: --path-dir adds PATH, quoted" "export PATH='/opt/ca bin'" "$(cat "$HOME/.zshrc")"
   if command -v zsh >/dev/null; then
     want "shell: a zsh sourcing the rc routes claude" "work" \
@@ -441,22 +441,22 @@ if selected shell; then
   want "shell: bash function routes claude" "client" \
     "$(cd "$W/client-proj" && bash -c "$("$CA" init bash); claude -p x" | sed -n 's/.* ACCT=\([^ ]*\) .*/\1/p')"
   "$CA" shell install fish >/dev/null 2>&1
-  want "shell: fish gets its own conf.d file" "yes" "$([ -f "$HOME/.config/fish/conf.d/claude-account.fish" ] && echo yes)"
+  want "shell: fish gets its own conf.d file" "yes" "$([ -f "$HOME/.config/fish/conf.d/claude-switcher.fish" ] && echo yes)"
   mkdir -p "$HOME/dotfiles"; printf 'export A=1\n' > "$HOME/dotfiles/bashrc"; ln -s "$HOME/dotfiles/bashrc" "$HOME/.bashrc"
   "$CA" shell install bash >/dev/null 2>&1
   want "shell: a symlinked rc file stays a symlink" "$HOME/dotfiles/bashrc" "$(readlink "$HOME/.bashrc")"
-  want_has "shell: ...and its target gets the block" "claude-account init bash" "$(cat "$HOME/dotfiles/bashrc")"
+  want_has "shell: ...and its target gets the block" "claude-switcher init bash" "$(cat "$HOME/dotfiles/bashrc")"
   want "shell: status lists every install" "3" "$("$CA" shell status --json | jq length)"
   "$CA" shell uninstall >/dev/null 2>&1
   want "shell: uninstall restores the rc file exactly" "$(printf 'export KEEP=1\nalias ll=ls')" "$(cat "$HOME/.zshrc")"
   want "shell: ...the symlinked one too" "export A=1" "$(cat "$HOME/dotfiles/bashrc")"
-  want "shell: ...and removes the fish file" "no" "$([ -e "$HOME/.config/fish/conf.d/claude-account.fish" ] && echo yes || echo no)"
+  want "shell: ...and removes the fish file" "no" "$([ -e "$HOME/.config/fish/conf.d/claude-switcher.fish" ] && echo yes || echo no)"
 fi
 
 if selected review; then
   section "review findings"
   # 1: a BEGIN without END is refused, the file untouched
-  printf 'a\n# >>> claude-account >>>\nuser line 1\nuser line 2\n' > "$SANDBOX/half.rc"; cp "$SANDBOX/half.rc" "$HOME/.zshrc"
+  printf 'a\n# >>> claude-switcher >>>\nuser line 1\nuser line 2\n' > "$SANDBOX/half.rc"; cp "$SANDBOX/half.rc" "$HOME/.zshrc"
   fails "review: install refuses an rc with a start marker but no end marker" "$CA" shell install zsh
   want "review: ...and leaves it untouched" "" "$(cmp "$HOME/.zshrc" "$SANDBOX/half.rc" 2>&1)"
   "$CA" shell uninstall >/dev/null 2>&1
@@ -488,18 +488,18 @@ claude -p x" 2>&1)
   fi
   "$CA" shell uninstall >/dev/null 2>&1
   # 4 + 5: never delete a dir the tool did not create in this call, nor the profiles root
-  "$CA" new keepme --no-login >/dev/null; keep_dir=$(profile_json keepme | jq -r .config_dir); "$CA" remove keepme >/dev/null 2>&1
-  chmod 500 "$HOME/.config/claude-account"
-  fails "review: new --dir fails when the config cannot be written" "$CA" new keepme --dir "$keep_dir" --no-login
-  chmod 700 "$HOME/.config/claude-account"
+  "$CA" add keepme --no-login >/dev/null; keep_dir=$(profile_json keepme | jq -r .config_dir); "$CA" remove keepme >/dev/null 2>&1
+  chmod 500 "$HOME/.config/claude-switcher"
+  fails "review: new --dir fails when the config cannot be written" "$CA" add keepme --dir "$keep_dir" --no-login
+  chmod 700 "$HOME/.config/claude-switcher"
   want "review: ...and the adopted dir survives" "yes" "$([ -d "$keep_dir" ] && echo yes)"
-  "$CA" new rootp --dir "$HOME/.local/share/claude-account/profiles" --no-login >/dev/null 2>&1
+  "$CA" add rootp --dir "$HOME/.local/share/claude-switcher/profiles" --no-login >/dev/null 2>&1
   "$CA" remove rootp --purge --yes >/dev/null 2>&1
   want "review: the profiles root itself is never purged" "yes" "$([ -d "$CLIENT_DIR" ] && echo yes)"
-  # 7: CLAUDE_ACCOUNT_BASE_DIR elsewhere than ~/.claude runs with CLAUDE_CONFIG_DIR set
+  # 7: CLAUDE_SWITCHER_BASE_DIR elsewhere than ~/.claude runs with CLAUDE_CONFIG_DIR set
   mkdir -p "$SANDBOX/altbase" "$SANDBOX/altproj"
-  alt() { CLAUDE_ACCOUNT_CONFIG="$SANDBOX/alt.toml" CLAUDE_ACCOUNT_BASE_DIR="$SANDBOX/altbase" "$CA" "$@"; }
-  alt new alt --base --no-login >/dev/null 2>&1; alt use alt "$SANDBOX/altproj" >/dev/null 2>&1
+  alt() { CLAUDE_SWITCHER_CONFIG="$SANDBOX/alt.toml" CLAUDE_SWITCHER_BASE_DIR="$SANDBOX/altbase" "$CA" "$@"; }
+  alt add alt --base --no-login >/dev/null 2>&1; alt use alt "$SANDBOX/altproj" >/dev/null 2>&1
   want "review: a base dir other than ~/.claude gets CLAUDE_CONFIG_DIR" "$(canon "$SANDBOX/altbase")" \
     "$(cd "$SANDBOX/altproj" && alt launch -p x | sed -n 's/^CFG=\([^ ]*\) .*/\1/p')"
   # 8: unreachable folders are kept by prune, dropped by prune --all, forgettable by name
@@ -520,11 +520,11 @@ claude -p x" 2>&1)
   want_has "review: the header says comments are not kept" "comments are not" "$(head -2 "$CONFIG")"
   rm "$CONFIG"; mv "$SANDBOX/dots/config.toml" "$CONFIG"
   # 12: no false "same account" note when claude reports no email
-  "$CA" new noemail --no-login >/dev/null
+  "$CA" add noemail --no-login >/dev/null
   want_not "review: no false duplicate-account note without an email" "same account" \
     "$(FAKE_NO_EMAIL=1 "$CA" login noemail </dev/null 2>&1)"
   "$CA" remove noemail >/dev/null 2>&1
-  "$CA" new tmpy --no-login >/dev/null; mkdir -p "$HOME/tmpy-here"; "$CA" use tmpy "$HOME/tmpy-here" >/dev/null 2>&1
+  "$CA" add tmpy --no-login >/dev/null; mkdir -p "$HOME/tmpy-here"; "$CA" use tmpy "$HOME/tmpy-here" >/dev/null 2>&1
   fails "review: headless remove of a mapped profile needs --force or -y" "$CA" remove tmpy
   "$CA" remove tmpy -y >/dev/null 2>&1
   want "review: -y accepts dropping its mappings" "" "$(profile_json tmpy)"
@@ -532,8 +532,8 @@ claude -p x" 2>&1)
   "$CA" use --no-input >/dev/null 2>&1; rc=$?
   want "review: usage errors exit 2" "2" "$rc"
   # 16: rename then new with the old name
-  "$CA" new r1 --no-login >/dev/null; "$CA" rename r1 r2 >/dev/null 2>&1
-  want_has "review: new over a renamed profile's dir names its owner" "is the config dir of r2" "$("$CA" new r1 --no-login 2>&1)"
+  "$CA" add r1 --no-login >/dev/null; "$CA" rename r1 r2 >/dev/null 2>&1
+  want_has "review: new over a renamed profile's dir names its owner" "is the config dir of r2" "$("$CA" add r1 --no-login 2>&1)"
   # 17: purge keeps everything when logout fails
   "$CA" login r2 </dev/null >/dev/null 2>&1; r2_dir=$(profile_json r2 | jq -r .config_dir)
   out=$(FAKE_LOGOUT_FAIL=1 "$CA" remove r2 --purge --yes 2>&1)
@@ -544,14 +544,14 @@ claude -p x" 2>&1)
   want "review: with logout working it purges" "no" "$([ -d "$r2_dir" ] && echo yes || echo no)"
   # 11b: uninstall --purge deletes only its own files from a custom config dir
   (
-    export HOME="$SANDBOX/h11" CLAUDE_ACCOUNT_CONFIG="$SANDBOX/h11/dots/claude-account/config.toml"
-    mkdir -p "$HOME/.claude" "$HOME/dots/claude-account"; echo keep > "$HOME/dots/claude-account/notes.txt"
-    "$CA" new solo11 --no-login >/dev/null; "$CA" login solo11 </dev/null >/dev/null 2>&1
+    export HOME="$SANDBOX/h11" CLAUDE_SWITCHER_CONFIG="$SANDBOX/h11/dots/claude-switcher/config.toml"
+    mkdir -p "$HOME/.claude" "$HOME/dots/claude-switcher"; echo keep > "$HOME/dots/claude-switcher/notes.txt"
+    "$CA" add solo11 --no-login >/dev/null; "$CA" login solo11 </dev/null >/dev/null 2>&1
     FAKE_LOGOUT_FAIL=1 "$CA" uninstall --purge --yes > "$SANDBOX/u11a.log" 2>&1; echo $? > "$SANDBOX/u11a.rc"
-    [ -f "$CLAUDE_ACCOUNT_CONFIG" ] && echo kept > "$SANDBOX/u11a.cfg"
+    [ -f "$CLAUDE_SWITCHER_CONFIG" ] && echo kept > "$SANDBOX/u11a.cfg"
     "$CA" uninstall --purge --yes > /dev/null 2>&1
-    [ -f "$HOME/dots/claude-account/notes.txt" ] && echo kept > "$SANDBOX/u11.notes"
-    [ -f "$CLAUDE_ACCOUNT_CONFIG" ] || echo gone > "$SANDBOX/u11.cfg"
+    [ -f "$HOME/dots/claude-switcher/notes.txt" ] && echo kept > "$SANDBOX/u11.notes"
+    [ -f "$CLAUDE_SWITCHER_CONFIG" ] || echo gone > "$SANDBOX/u11.cfg"
   )
   want "review: uninstall --purge stops when a logout fails" "1" "$(cat "$SANDBOX/u11a.rc")"
   want "review: ...changing nothing" "kept" "$(cat "$SANDBOX/u11a.cfg" 2>/dev/null)"
@@ -579,12 +579,12 @@ fi
 if selected update; then
   section "updates"
   bump() { echo "$CURRENT_V" | awk -F. -v k="$1" '{ if (k=="major") print $1+1".0.0"; else if (k=="minor") print $1"."$2+1".0"; else print $1"."$2"."$3+1 }'; }
-  cache="$HOME/.cache/claude-account/update.json"
+  cache="$HOME/.cache/claude-switcher/update.json"
   put_cache() { mkdir -p "$(dirname "$cache")"; printf '{"checked":%s,"latest":"%s"}' "$(date +%s)" "$1" > "$cache"; }
   want_has "update: doctor says when it is up to date" "is the latest stable release" "$("$CA" doctor 2>&1)"
   latest_is "$(bump minor)"
   want_has "update: doctor names a newer stable release" "$(bump minor) is available" "$("$CA" doctor 2>&1)"
-  want_has "update: ...and the command to get it" "claude-account update" "$("$CA" doctor 2>&1)"
+  want_has "update: ...and the command to get it" "claude-switcher update" "$("$CA" doctor 2>&1)"
   latest_is "$CURRENT_V"
   if command -v expect >/dev/null; then
     (
@@ -593,7 +593,7 @@ if selected update; then
       put_cache "$(bump minor)";  pty_in "$HOME" "$CA" list -- > "$SANDBOX/n2.log"
       put_cache "$(bump major)";  pty_in "$HOME" "$CA" list -- > "$SANDBOX/n3.log"
       pty_in "$HOME" "$CA" list --json -- > "$SANDBOX/n4.log"
-      CLAUDE_ACCOUNT_NO_UPDATE_CHECK=1 pty_in "$HOME" "$CA" list -- > "$SANDBOX/n5.log"
+      CLAUDE_SWITCHER_NO_UPDATE_CHECK=1 pty_in "$HOME" "$CA" list -- > "$SANDBOX/n5.log"
       put_cache "$CURRENT_V";     pty_in "$HOME" "$CA" list -- > "$SANDBOX/n6.log"
       # A day-old cache is refreshed in the background, for the next command.
       latest_is "$(bump minor)"
@@ -604,9 +604,9 @@ if selected update; then
       latest_is "$CURRENT_V"
     )
     plain() { sed 's/\x1b\[[0-9;]*m//g' "$1"; }
-    want_has "update: a patch release is an info notice" "info: claude-account $(bump patch) is available" "$(plain "$SANDBOX/n1.log")"
-    want_has "update: a minor release is a warning" "warning: claude-account $(bump minor) is available" "$(plain "$SANDBOX/n2.log")"
-    want_has "update: a major release is flagged as danger" "danger: claude-account $(bump major) is available" "$(plain "$SANDBOX/n3.log")"
+    want_has "update: a patch release is an info notice" "info: claude-switcher $(bump patch) is available" "$(plain "$SANDBOX/n1.log")"
+    want_has "update: a minor release is a warning" "warning: claude-switcher $(bump minor) is available" "$(plain "$SANDBOX/n2.log")"
+    want_has "update: a major release is flagged as danger" "danger: claude-switcher $(bump major) is available" "$(plain "$SANDBOX/n3.log")"
     want "update: the notice comes last" "danger:" "$(grep -v '^<<exit' "$SANDBOX/n3.log" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^\s*$' | tail -1 | cut -d' ' -f1)"
     want_not "update: no notice with --json" "is available" "$(cat "$SANDBOX/n4.log")"
     want_not "update: no notice when switched off" "is available" "$(cat "$SANDBOX/n5.log")"
@@ -623,18 +623,18 @@ if selected update; then
     Linux-x86_64) T=x86_64-unknown-linux-musl ;; Linux-aarch64) T=aarch64-unknown-linux-musl ;; *) T="" ;;
   esac
   if [ -n "$T" ]; then
-    UREL="$SANDBOX/urel"; mkdir -p "$UREL/pkg" "$SANDBOX/uhome/tools"; cp "$CA" "$UREL/pkg/claude-account"
-    tar -czf "$UREL/claude-account-$T.tar.gz" -C "$UREL/pkg" claude-account
-    (cd "$UREL" && shasum -a 256 "claude-account-$T.tar.gz" > "claude-account-$T.tar.gz.sha256")
-    cp "$CA" "$SANDBOX/uhome/tools/claude-account"
-    out=$(HOME="$SANDBOX/uhome" "$SANDBOX/uhome/tools/claude-account" update 2>&1)
+    UREL="$SANDBOX/urel"; mkdir -p "$UREL/pkg" "$SANDBOX/uhome/tools"; cp "$CA" "$UREL/pkg/claude-switcher"
+    tar -czf "$UREL/claude-switcher-$T.tar.gz" -C "$UREL/pkg" claude-switcher
+    (cd "$UREL" && shasum -a 256 "claude-switcher-$T.tar.gz" > "claude-switcher-$T.tar.gz.sha256")
+    cp "$CA" "$SANDBOX/uhome/tools/claude-switcher"
+    out=$(HOME="$SANDBOX/uhome" "$SANDBOX/uhome/tools/claude-switcher" update 2>&1)
     want_has "update: update when current says so and does nothing" "is the latest stable release" "$out"
     latest_is "$(bump minor)"
-    out=$(HOME="$SANDBOX/uhome" CLAUDE_ACCOUNT_INSTALLER_URL="file://$REPO/install.sh" CLAUDE_ACCOUNT_DOWNLOAD_URL="file://$UREL" \
-      "$SANDBOX/uhome/tools/claude-account" update 2>&1); rc=$?
+    out=$(HOME="$SANDBOX/uhome" CLAUDE_SWITCHER_INSTALLER_URL="file://$REPO/install.sh" CLAUDE_SWITCHER_DOWNLOAD_URL="file://$UREL" \
+      "$SANDBOX/uhome/tools/claude-switcher" update 2>&1); rc=$?
     latest_is "$CURRENT_V"
     want "update: update runs the official installer" "0" "$rc"
-    want_has "update: ...into the binary's own folder" "claude-account $CURRENT_V in ~/tools" "$out"
+    want_has "update: ...into the binary's own folder" "claude-switcher $CURRENT_V in ~/tools" "$out"
   else skip "update: update command" "no asset naming for this platform"; fi
 fi
 
@@ -677,23 +677,23 @@ fi
 if selected integration; then
   section "status line and hook"
   want "integration: statusline shows the session's profile" "work" \
-    "$(echo "{\"workspace\":{\"current_dir\":\"$W\"}}" | CLAUDE_ACCOUNT=work "$CA" statusline)"
+    "$(echo "{\"workspace\":{\"current_dir\":\"$W\"}}" | CLAUDE_SWITCHER_PROFILE=work "$CA" statusline)"
   want "integration: statusline flags a mismatch" "work (here: client)" \
-    "$(echo "{\"workspace\":{\"current_dir\":\"$W/client-proj\"}}" | CLAUDE_ACCOUNT=work "$CA" statusline)"
-  want "integration: statusline infers the profile without CLAUDE_ACCOUNT" "client" \
+    "$(echo "{\"workspace\":{\"current_dir\":\"$W/client-proj\"}}" | CLAUDE_SWITCHER_PROFILE=work "$CA" statusline)"
+  want "integration: statusline infers the profile without CLAUDE_SWITCHER_PROFILE" "client" \
     "$(echo "{\"cwd\":\"$W/client-proj\"}" | CLAUDE_CONFIG_DIR="$CLIENT_DIR" "$CA" statusline)"
   want "integration: an alias is inferred from the map" "personal" "$(echo "{\"cwd\":\"$HOME/personal\"}" | "$CA" statusline)"
   want "integration: hook is silent when session and map agree" "" \
-    "$(echo "{\"cwd\":\"$W\"}" | CLAUDE_ACCOUNT=work "$CA" hook session-start)"
+    "$(echo "{\"cwd\":\"$W\"}" | CLAUDE_SWITCHER_PROFILE=work "$CA" hook session-start)"
   want_has "integration: hook tells Claude about a mismatch" 'runs as profile "work"' \
-    "$(echo "{\"cwd\":\"$W/client-proj\"}" | CLAUDE_ACCOUNT=work "$CA" hook session-start)"
+    "$(echo "{\"cwd\":\"$W/client-proj\"}" | CLAUDE_SWITCHER_PROFILE=work "$CA" hook session-start)"
   mkdir -p "$W/sess-a" "$HOME/sess-b"
-  out=$(cd "$W/sess-a" && CLAUDECODE=1 CLAUDE_ACCOUNT=work "$CA" use client "$HOME/sess-b" 2>&1)
+  out=$(cd "$W/sess-a" && CLAUDECODE=1 CLAUDE_SWITCHER_PROFILE=work "$CA" use client "$HOME/sess-b" 2>&1)
   want_not "integration: mapping another folder from a session says nothing about the session" "This session" "$out"
-  out=$(cd "$W/sess-a" && CLAUDECODE=1 CLAUDE_ACCOUNT=work "$CA" use client 2>&1)
+  out=$(cd "$W/sess-a" && CLAUDECODE=1 CLAUDE_SWITCHER_PROFILE=work "$CA" use client 2>&1)
   want_has "integration: remapping the session's own folder says how to switch" "resume it as client" "$out"
   "$CA" forget "$W/sess-a" >/dev/null
-  want_has "integration: completions" "claude-account" "$("$CA" completions zsh | head -3)"
+  want_has "integration: completions" "claude-switcher" "$("$CA" completions zsh | head -3)"
 fi
 
 if selected picker; then
@@ -725,11 +725,11 @@ if selected picker; then
     want "interactive: ...and remembers it" "work" "$("$CA" resolve "$HOME/sw")"
     want_has "interactive: Enter keeps the current profile" "Unchanged: work" "$(pty_in "$HOME/sw" "$CA" -- ENTER)"
     want_has "interactive: use without a profile asks" "~/sw -> client" "$(pty_in "$HOME/sw" "$CA" use -- c l i e n t ENTER)"
-    out=$(pty_in "$HOME" "$CA" new -- s o l o ENTER DOWN ENTER w o r k ENTER)
+    out=$(pty_in "$HOME" "$CA" add -- s o l o ENTER DOWN ENTER w o r k ENTER)
     want_has "interactive: new asks the name and the kind" "Profile solo: work@example.com, same login as work" "$out"
-    out=$(pty_in "$HOME" "$CA" new -- b a d ' ' ENTER)
+    out=$(pty_in "$HOME" "$CA" add -- b a d ' ' ENTER)
     want_has "interactive: new validates the name as you type" "lowercase letters" "$out"
-    out=$(pty_in "$HOME" "$CA" new -- f r e s h ENTER ENTER ENTER)
+    out=$(pty_in "$HOME" "$CA" add -- f r e s h ENTER ENTER ENTER)
     want_has "interactive: a new own profile offers to log in and verifies it" "fresh is logged in as fresh@example.com" "$out"
     FAKE_LOGIN_EMAIL=client@example.com "$CA" login client </dev/null >/dev/null 2>&1
     out=$(pty_in "$HOME" "$CA" login client -- ENTER)
@@ -746,11 +746,11 @@ if selected picker; then
     want "picker: ...and nothing is remembered" "" "$("$CA" resolve "$HOME/sub1")"
     out=$(pty_in "$HOME/sub1" "$CA" launch "fix the bug" -- ESC)
     want_has "picker: still shown for a prompt argument" "account for" "$out"
-    "$CA" new tmpx --no-login >/dev/null; tmpx_dir=$(profile_json tmpx | jq -r .config_dir)
+    "$CA" add tmpx --no-login >/dev/null; tmpx_dir=$(profile_json tmpx | jq -r .config_dir)
     out=$(pty_in "$HOME" "$CA" remove -- t m p x ENTER ENTER y ENTER)
     want_has "interactive: remove picks, offers purge (default no) and confirms" "Removed tmpx" "$out"
     want "interactive: ...keeping the folder when purge was declined" "yes" "$([ -d "$tmpx_dir" ] && echo yes)"
-    "$CA" new tmpz --no-login >/dev/null
+    "$CA" add tmpz --no-login >/dev/null
     out=$(pty_in "$HOME" "$CA" remove tmpz -- ENTER ENTER)
     want_has "interactive: remove defaults to no" "<<exit 130>>" "$out"
     want "interactive: ...and keeps the profile" "tmpz" "$(profile_json tmpz | jq -r .name)"
@@ -771,18 +771,18 @@ if selected picker; then
     out=$(SHELL=/bin/unknown ZDOTDIR="$SANDBOX/shxdir" pty_in "$HOME" "$CA" shell install -- ENTER)
     want_has "interactive: shell install asks the shell when \$SHELL says nothing" "Shell integration added to" "$out"
     "$CA" shell uninstall >/dev/null 2>&1
-    cp "$CA" "$SANDBOX/ubin-claude-account"
-    out=$(pty_in "$HOME" "$SANDBOX/ubin-claude-account" uninstall -- ENTER)
+    cp "$CA" "$SANDBOX/ubin-claude-switcher"
+    out=$(pty_in "$HOME" "$SANDBOX/ubin-claude-switcher" uninstall -- ENTER)
     want_has "interactive: uninstall shows the plan" "delete this binary" "$out"
-    want "interactive: ...and defaults to no" "yes" "$([ -x "$SANDBOX/ubin-claude-account" ] && echo yes)"
+    want "interactive: ...and defaults to no" "yes" "$([ -x "$SANDBOX/ubin-claude-switcher" ] && echo yes)"
     out=$(pty_in "$HOME" "$CA" login newacct -- ENTER ENTER)
-    want_has "interactive: login of an unknown profile offers to create it" "There is no profile newacct" "$out"
+    want_has "interactive: login of an unknown profile offers to create it" "There is no account named newacct" "$out"
     want_has "interactive: ...creates it and logs it in" "newacct is logged in as newacct@example.com" "$out"
     out=$(pty_in "$HOME" "$CA" login -- + ENTER v i a ENTER ENTER)
-    want_has "interactive: login's picker offers a new profile" "via is logged in as via@example.com" "$out"
+    want_has "interactive: login's picker offers to add an account" "via is logged in as via@example.com" "$out"
     mkdir -p "$HOME/new6"
     out=$(picker_in "$HOME/new6" + ENTER c l i 2 ENTER ENTER ENTER)
-    want_has "picker: + New profile creates, logs in and launches" "ACCT=cli2" "$out"
+    want_has "picker: + Add an account creates, logs in and launches" "ACCT=cli2" "$out"
     want_has "picker: ...after logging it in" "cli2 is logged in as cli2@example.com" "$out"
     want "picker: ...and remembers it" "cli2" "$("$CA" resolve "$HOME/new6")"
   fi
@@ -802,7 +802,7 @@ if selected setup; then
       printf '%s\n' "$out" > "$SANDBOX/setup.log"
       "$CA" list --json > "$SANDBOX/setup.json"
       "$CA" resolve "$HOME/proj" > "$SANDBOX/setup.resolve"
-      grep -c '>>> claude-account >>>' "$HOME/.zshrc" > "$SANDBOX/setup.rc" || true
+      grep -c '>>> claude-switcher >>>' "$HOME/.zshrc" > "$SANDBOX/setup.rc" || true
     )
     out=$(cat "$SANDBOX/setup.log")
     want_has "setup: detects the existing login" "Claude Code is logged in as main@example.com" "$out"
@@ -815,7 +815,7 @@ if selected setup; then
     (
       export HOME="$SANDBOX/fresh2"
       mkdir -p "$HOME/.claude"; echo '{}' > "$HOME/.claude.json"
-      "$CA" new taken --no-login >/dev/null
+      "$CA" add taken --no-login >/dev/null
       pty_in "$HOME" "$CA" setup -- t a k e n ENTER ESC > "$SANDBOX/setup2.log"
     )
     want_has "setup: a taken name is asked again, not fatal" "taken already exists" "$(cat "$SANDBOX/setup2.log")"
@@ -831,65 +831,65 @@ if selected install; then
   if [ -z "$T" ]; then skip "install" "no asset naming for this platform"
   else
     REL="$SANDBOX/release"; mkdir -p "$REL/pkg"
-    cp "$CA" "$REL/pkg/claude-account"
-    tar -czf "$REL/claude-account-$T.tar.gz" -C "$REL/pkg" claude-account
-    (cd "$REL" && shasum -a 256 "claude-account-$T.tar.gz" > "claude-account-$T.tar.gz.sha256")
+    cp "$CA" "$REL/pkg/claude-switcher"
+    tar -czf "$REL/claude-switcher-$T.tar.gz" -C "$REL/pkg" claude-switcher
+    (cd "$REL" && shasum -a 256 "claude-switcher-$T.tar.gz" > "claude-switcher-$T.tar.gz.sha256")
     (
-      export HOME="$SANDBOX/inst" CLAUDE_ACCOUNT_DOWNLOAD_URL="file://$REL" PATH="$SANDBOX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      export HOME="$SANDBOX/inst" CLAUDE_SWITCHER_DOWNLOAD_URL="file://$REL" PATH="$SANDBOX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
       mkdir -p "$HOME"; printf 'export MINE=1\n' > "$HOME/.zshrc"
       sh "$REPO/install.sh" > "$SANDBOX/i1.log" 2>&1; echo $? > "$SANDBOX/i1.rc"
       readlink "$HOME/.local/bin/csw" > "$SANDBOX/a.link" 2>&1; "$HOME/.local/bin/csw" --version > "$SANDBOX/a.run" 2>&1
       sh "$REPO/install.sh" > "$SANDBOX/i2.log" 2>&1
-      printf '#!/bin/sh\necho "claude-account 0.0.1"\n' > "$HOME/.local/bin/claude-account"
+      printf '#!/bin/sh\necho "claude-switcher 0.0.1"\n' > "$HOME/.local/bin/claude-switcher"
       sh "$REPO/install.sh" > "$SANDBOX/iup.log" 2>&1
-      printf '#!/bin/sh\necho "claude-account 99.0.0"\n' > "$HOME/.local/bin/claude-account"
+      printf '#!/bin/sh\necho "claude-switcher 99.0.0"\n' > "$HOME/.local/bin/claude-switcher"
       sh "$REPO/install.sh" > "$SANDBOX/idown.log" 2>&1
-      printf '#!/bin/sh\necho "claude-account %s-rc.1"\n' "$("$CA" --version | cut -d' ' -f2)" > "$HOME/.local/bin/claude-account"
+      printf '#!/bin/sh\necho "claude-switcher %s-rc.1"\n' "$("$CA" --version | cut -d' ' -f2)" > "$HOME/.local/bin/claude-switcher"
       sh "$REPO/install.sh" > "$SANDBOX/ipre.log" 2>&1
-      grep -c '>>> claude-account >>>' "$HOME/.zshrc" > "$SANDBOX/i.blocks"
+      grep -c '>>> claude-switcher >>>' "$HOME/.zshrc" > "$SANDBOX/i.blocks"
       cp "$HOME/.zshrc" "$SANDBOX/i.zshrc"
-      (cd "$HOME" && ZDOTDIR="$HOME" zsh -ic 'whence -w claude; claude-account --version' > "$SANDBOX/i.shell" 2>&1)
+      (cd "$HOME" && ZDOTDIR="$HOME" zsh -ic 'whence -w claude; claude-switcher --version' > "$SANDBOX/i.shell" 2>&1)
       mkdir -p "$HOME/.claude"
-      "$HOME/.local/bin/claude-account" new me --base --no-login >/dev/null
+      "$HOME/.local/bin/claude-switcher" add me --base --no-login >/dev/null
       sh "$REPO/install.sh" > "$SANDBOX/upgrade.log" 2>&1
       sh "$REPO/install.sh" --uninstall > "$SANDBOX/u1.log" 2>&1; echo $? > "$SANDBOX/u1.rc"
-      [ -e "$HOME/.local/bin/claude-account" ] && echo yes > "$SANDBOX/u1.bin" || echo no > "$SANDBOX/u1.bin"
+      [ -e "$HOME/.local/bin/claude-switcher" ] && echo yes > "$SANDBOX/u1.bin" || echo no > "$SANDBOX/u1.bin"
       [ -L "$HOME/.local/bin/csw" ] && echo yes > "$SANDBOX/u1.alias" || echo no > "$SANDBOX/u1.alias"
       cp "$HOME/.zshrc" "$SANDBOX/u1.zshrc"
-      [ -f "$HOME/.config/claude-account/config.toml" ] && echo kept > "$SANDBOX/u1.cfg" || echo gone > "$SANDBOX/u1.cfg"
+      [ -f "$HOME/.config/claude-switcher/config.toml" ] && echo kept > "$SANDBOX/u1.cfg" || echo gone > "$SANDBOX/u1.cfg"
       sh "$REPO/install.sh" --no-modify-rc > "$SANDBOX/i3.log" 2>&1
       cp "$HOME/.zshrc" "$SANDBOX/i3.zshrc"
       sh "$REPO/install.sh" --uninstall --purge > "$SANDBOX/u2.log" 2>&1; echo $? > "$SANDBOX/u2.rc"
-      [ -e "$HOME/.config/claude-account" ] && echo kept > "$SANDBOX/u2.cfg" || echo gone > "$SANDBOX/u2.cfg"
+      [ -e "$HOME/.config/claude-switcher" ] && echo kept > "$SANDBOX/u2.cfg" || echo gone > "$SANDBOX/u2.cfg"
       [ -d "$HOME/.claude" ] || mkdir -p "$HOME/.claude"
       sh "$REPO/install.sh" --uninstall > "$SANDBOX/u3.log" 2>&1; echo $? > "$SANDBOX/u3.rc"
-      echo "0000  claude-account-$T.tar.gz" > "$REL/bad.sha256"
-      mkdir -p "$SANDBOX/badrel"; cp "$REL/claude-account-$T.tar.gz" "$SANDBOX/badrel/"; cp "$REL/bad.sha256" "$SANDBOX/badrel/claude-account-$T.tar.gz.sha256"
-      CLAUDE_ACCOUNT_DOWNLOAD_URL="file://$SANDBOX/badrel" sh "$REPO/install.sh" > "$SANDBOX/bad.log" 2>&1; echo $? > "$SANDBOX/bad.rc"
-      [ -e "$HOME/.local/bin/claude-account" ] && echo yes > "$SANDBOX/bad.bin" || echo no > "$SANDBOX/bad.bin"
-      CLAUDE_ACCOUNT_TARGET=x86_64-pc-windows-msvc sh "$REPO/install.sh" > "$SANDBOX/win.log" 2>&1; echo $? > "$SANDBOX/win.rc"
+      echo "0000  claude-switcher-$T.tar.gz" > "$REL/bad.sha256"
+      mkdir -p "$SANDBOX/badrel"; cp "$REL/claude-switcher-$T.tar.gz" "$SANDBOX/badrel/"; cp "$REL/bad.sha256" "$SANDBOX/badrel/claude-switcher-$T.tar.gz.sha256"
+      CLAUDE_SWITCHER_DOWNLOAD_URL="file://$SANDBOX/badrel" sh "$REPO/install.sh" > "$SANDBOX/bad.log" 2>&1; echo $? > "$SANDBOX/bad.rc"
+      [ -e "$HOME/.local/bin/claude-switcher" ] && echo yes > "$SANDBOX/bad.bin" || echo no > "$SANDBOX/bad.bin"
+      CLAUDE_SWITCHER_TARGET=x86_64-pc-windows-msvc sh "$REPO/install.sh" > "$SANDBOX/win.log" 2>&1; echo $? > "$SANDBOX/win.rc"
       sh "$REPO/install.sh" --purge > "$SANDBOX/purgeonly.log" 2>&1; echo $? > "$SANDBOX/purgeonly.rc"
       sh "$REPO/install.sh" --bogus > "$SANDBOX/bogus.log" 2>&1; echo $? > "$SANDBOX/bogus.rc"
     )
     want "install: exits 0" "0" "$(cat "$SANDBOX/i1.rc")"
-    want_has "install: reports the version" "Installed claude-account" "$(cat "$SANDBOX/i1.log")"
+    want_has "install: reports the version" "Installed claude-switcher" "$(cat "$SANDBOX/i1.log")"
     want_has "install: puts ~/.local/bin on PATH in the block, through \$HOME" 'export PATH="$HOME/.local/bin:$PATH"' "$(cat "$SANDBOX/i.zshrc")"
     want "install: running twice leaves one block" "1" "$(cat "$SANDBOX/i.blocks")"
-    want "install: adds the short command csw as a relative link" "claude-account" "$(cat "$SANDBOX/a.link")"
-    want_has "install: ...that runs claude-account" "claude-account $CURRENT_V" "$(cat "$SANDBOX/a.run")"
+    want "install: adds the short command csw as a relative link" "claude-switcher" "$(cat "$SANDBOX/a.link")"
+    want_has "install: ...that runs claude-switcher" "claude-switcher $CURRENT_V" "$(cat "$SANDBOX/a.run")"
     want_has "install: ...and says how to use it" "csw status" "$(cat "$SANDBOX/i1.log")"
     want_has "install: a second run keeps it" "keep the short command csw" "$(cat "$SANDBOX/i2.log")"
-    want_has "install: the same version again is a reinstall" "reinstall claude-account" "$(cat "$SANDBOX/i2.log")"
-    want_has "install: an older installed version is an upgrade" "upgrade claude-account 0.0.1 ->" "$(cat "$SANDBOX/iup.log")"
-    want_has "install: ...and says so when done" "Upgraded claude-account 0.0.1 ->" "$(cat "$SANDBOX/iup.log")"
-    want_has "install: a newer installed version is a downgrade" "downgrade claude-account 99.0.0 ->" "$(cat "$SANDBOX/idown.log")"
-    want_has "install: the release after its own pre-release is an upgrade" "upgrade claude-account $CURRENT_V-rc.1 -> $CURRENT_V" "$(cat "$SANDBOX/ipre.log")"
+    want_has "install: the same version again is a reinstall" "reinstall claude-switcher" "$(cat "$SANDBOX/i2.log")"
+    want_has "install: an older installed version is an upgrade" "upgrade claude-switcher 0.0.1 ->" "$(cat "$SANDBOX/iup.log")"
+    want_has "install: ...and says so when done" "Upgraded claude-switcher 0.0.1 ->" "$(cat "$SANDBOX/iup.log")"
+    want_has "install: a newer installed version is a downgrade" "downgrade claude-switcher 99.0.0 ->" "$(cat "$SANDBOX/idown.log")"
+    want_has "install: the release after its own pre-release is an upgrade" "upgrade claude-switcher $CURRENT_V-rc.1 -> $CURRENT_V" "$(cat "$SANDBOX/ipre.log")"
     want_has "install: keeps the user's rc lines" "export MINE=1" "$(cat "$SANDBOX/i.zshrc")"
     want_has "install: a new zsh gets the claude function" "claude: function" "$(cat "$SANDBOX/i.shell")"
-    want_has "install: ...and finds claude-account on PATH" "claude-account 0." "$(cat "$SANDBOX/i.shell")"
-    want_has "install: tells what to do next" "claude-account setup" "$(cat "$SANDBOX/i1.log")"
+    want_has "install: ...and finds claude-switcher on PATH" "claude-switcher 0." "$(cat "$SANDBOX/i.shell")"
+    want_has "install: tells what to do next, with the short command" "csw setup" "$(cat "$SANDBOX/i1.log")"
     want_has "install: an upgrade keeps profiles and says so" "profiles and mappings are unchanged" "$(cat "$SANDBOX/upgrade.log")"
-    want_not "install: ...without suggesting setup again" "claude-account setup" "$(cat "$SANDBOX/upgrade.log")"
+    want_not "install: ...without suggesting setup again" "setup" "$(grep -i -A5 "Next steps" "$SANDBOX/upgrade.log")"
     want "uninstall: exits 0" "0" "$(cat "$SANDBOX/u1.rc")"
     want "uninstall: deletes the binary" "no" "$(cat "$SANDBOX/u1.bin")"
     want "uninstall: ...and the short command" "no" "$(cat "$SANDBOX/u1.alias")"
@@ -911,7 +911,7 @@ if selected install; then
       for t in "$@"; do p=$(command -v "$t" 2>/dev/null) && ln -s "$p" "$d/$t"; done; }
     without() { local skip=" $1 " t out=""; for t in $TOOLS; do case "$skip" in *" $t "*) ;; *) out="$out $t" ;; esac; done; echo "$out"; }
     (
-      export HOME="$SANDBOX/inst3" CLAUDE_ACCOUNT_DOWNLOAD_URL="file://$REL"
+      export HOME="$SANDBOX/inst3" CLAUDE_SWITCHER_DOWNLOAD_URL="file://$REL"
       mkdir -p "$HOME"; : > "$HOME/.zshrc"
       # shellcheck disable=SC2046
       mkbin "$SANDBOX/mb1" $(without "tar gzip curl")
@@ -925,25 +925,25 @@ if selected install; then
       SUDO_USER=someone PATH="$SANDBOX/mb3" /bin/sh "$REPO/install.sh" > "$SANDBOX/d3.log" 2>&1; echo $? > "$SANDBOX/d3.rc"
       mkdir -p "$HOME/ro"; chmod 500 "$HOME/ro"
       sh "$REPO/install.sh" --bin-dir "$HOME/ro/bin" > "$SANDBOX/d4.log" 2>&1; echo $? > "$SANDBOX/d4.rc"; chmod 700 "$HOME/ro"
-      CLAUDE_ACCOUNT_DOWNLOAD_URL="file://$SANDBOX/no-such-release" sh "$REPO/install.sh" > "$SANDBOX/d5.log" 2>&1; echo $? > "$SANDBOX/d5.rc"
-      CLAUDE_ACCOUNT_DOWNLOAD_URL="https://127.0.0.1:9" sh "$REPO/install.sh" > "$SANDBOX/d6.log" 2>&1; echo $? > "$SANDBOX/d6.rc"
+      CLAUDE_SWITCHER_DOWNLOAD_URL="file://$SANDBOX/no-such-release" sh "$REPO/install.sh" > "$SANDBOX/d5.log" 2>&1; echo $? > "$SANDBOX/d5.rc"
+      CLAUDE_SWITCHER_DOWNLOAD_URL="https://127.0.0.1:9" sh "$REPO/install.sh" > "$SANDBOX/d6.log" 2>&1; echo $? > "$SANDBOX/d6.rc"
       mkbin "$SANDBOX/mb7" $TOOLS; rm "$SANDBOX/mb7/uname"; printf '#!/bin/sh\n[ "$1" = -s ] && echo MINGW64_NT-10.0 || echo x86_64\n' > "$SANDBOX/mb7/uname"; chmod +x "$SANDBOX/mb7/uname"
       PATH="$SANDBOX/mb7" /bin/sh "$REPO/install.sh" > "$SANDBOX/d7.log" 2>&1; echo $? > "$SANDBOX/d7.rc"
-      [ -e "$HOME/.local/bin/claude-account" ] && echo yes > "$SANDBOX/d.none" || echo no > "$SANDBOX/d.none"
+      [ -e "$HOME/.local/bin/claude-switcher" ] && echo yes > "$SANDBOX/d.none" || echo no > "$SANDBOX/d.none"
       cp "$HOME/.zshrc" "$SANDBOX/d.zshrc"
       # no claude on PATH: installs, and says it is needed
       mkbin "$SANDBOX/mb8" $TOOLS
       PATH="$SANDBOX/mb8" /bin/sh "$REPO/install.sh" > "$SANDBOX/d8.log" 2>&1; echo $? > "$SANDBOX/d8.rc"
       # convergence: a second run leaves identical files
-      cp "$HOME/.zshrc" "$SANDBOX/c1.zshrc"; cp "$HOME/.local/bin/claude-account" "$SANDBOX/c1.bin"
+      cp "$HOME/.zshrc" "$SANDBOX/c1.zshrc"; cp "$HOME/.local/bin/claude-switcher" "$SANDBOX/c1.bin"
       PATH="$SANDBOX/mb8" /bin/sh "$REPO/install.sh" > /dev/null 2>&1
-      cmp "$HOME/.zshrc" "$SANDBOX/c1.zshrc" > "$SANDBOX/c.rc.cmp" 2>&1; cmp "$HOME/.local/bin/claude-account" "$SANDBOX/c1.bin" > "$SANDBOX/c.bin.cmp" 2>&1
+      cmp "$HOME/.zshrc" "$SANDBOX/c1.zshrc" > "$SANDBOX/c.rc.cmp" 2>&1; cmp "$HOME/.local/bin/claude-switcher" "$SANDBOX/c1.bin" > "$SANDBOX/c.bin.cmp" 2>&1
       # an interrupted run (binary gone, a half-copied leftover): run again, done
-      rm "$HOME/.local/bin/claude-account"; echo partial > "$HOME/.local/bin/.claude-account.new"
+      rm "$HOME/.local/bin/claude-switcher"; echo partial > "$HOME/.local/bin/.claude-switcher.new"
       PATH="$SANDBOX/mb8" /bin/sh "$REPO/install.sh" > "$SANDBOX/c2.log" 2>&1; echo $? > "$SANDBOX/c2.rc"
-      ls -A "$HOME/.local/bin" | tr '\n' ' ' > "$SANDBOX/c2.ls"; grep -c '>>> claude-account >>>' "$HOME/.zshrc" > "$SANDBOX/c2.blocks"
+      ls -A "$HOME/.local/bin" | tr '\n' ' ' > "$SANDBOX/c2.ls"; grep -c '>>> claude-switcher >>>' "$HOME/.zshrc" > "$SANDBOX/c2.blocks"
       # another copy first on PATH
-      mkdir -p "$SANDBOX/shadow"; cp "$CA" "$SANDBOX/shadow/claude-account"
+      mkdir -p "$SANDBOX/shadow"; cp "$CA" "$SANDBOX/shadow/claude-switcher"
       PATH="$SANDBOX/shadow:$SANDBOX/mb8" /bin/sh "$REPO/install.sh" > "$SANDBOX/c3.log" 2>&1
     )
     want "install: missing tools fail" "1" "$(cat "$SANDBOX/d1.rc")"
@@ -971,12 +971,12 @@ if selected install; then
     want "install: a second run leaves the rc file byte-identical" "" "$(cat "$SANDBOX/c.rc.cmp")"
     want "install: ...and the binary byte-identical" "" "$(cat "$SANDBOX/c.bin.cmp")"
     want "install: an interrupted install finishes by running it again" "0" "$(cat "$SANDBOX/c2.rc")"
-    want "install: ...leaving only the binary and its short command" "claude-account csw " "$(cat "$SANDBOX/c2.ls")"
+    want "install: ...leaving only the binary and its short command" "claude-switcher csw " "$(cat "$SANDBOX/c2.ls")"
     want "install: ...and one shell block" "1" "$(cat "$SANDBOX/c2.blocks")"
     want_has "install: warns when another copy wins on PATH" "comes before ~/.local/bin on your PATH" "$(cat "$SANDBOX/c3.log")"
     # Short command: never over someone else's file or command; configurable.
     (
-      export HOME="$SANDBOX/al" CLAUDE_ACCOUNT_DOWNLOAD_URL="file://$REL" PATH="$SANDBOX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      export HOME="$SANDBOX/al" CLAUDE_SWITCHER_DOWNLOAD_URL="file://$REL" PATH="$SANDBOX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
       mkdir -p "$HOME/.local/bin" "$SANDBOX/othercmd"; : > "$HOME/.zshrc"
       printf '#!/bin/sh\necho mine\n' > "$HOME/.local/bin/csw"; chmod +x "$HOME/.local/bin/csw"
       sh "$REPO/install.sh" > "$SANDBOX/al1.log" 2>&1; cat "$HOME/.local/bin/csw" > "$SANDBOX/al1.kept"
@@ -985,7 +985,7 @@ if selected install; then
       [ -e "$HOME/.local/bin/csw" ] && echo yes > "$SANDBOX/al2.made" || echo no > "$SANDBOX/al2.made"
       sh "$REPO/install.sh" --no-alias > /dev/null 2>&1; [ -e "$HOME/.local/bin/csw" ] && echo yes > "$SANDBOX/al3" || echo no > "$SANDBOX/al3"
       sh "$REPO/install.sh" --alias cacc > "$SANDBOX/al4.log" 2>&1; readlink "$HOME/.local/bin/cacc" > "$SANDBOX/al4.link" 2>&1
-      "$HOME/.local/bin/claude-account" uninstall -y > "$SANDBOX/al5.log" 2>&1; [ -e "$HOME/.local/bin/cacc" ] && echo yes > "$SANDBOX/al5" || echo no > "$SANDBOX/al5"
+      "$HOME/.local/bin/claude-switcher" uninstall -y > "$SANDBOX/al5.log" 2>&1; [ -e "$HOME/.local/bin/cacc" ] && echo yes > "$SANDBOX/al5" || echo no > "$SANDBOX/al5"
     )
     want_has "install: a file already named csw is left alone" "skip the short command csw: ~/.local/bin/csw already exists" "$(cat "$SANDBOX/al1.log")"
     want_has "install: ...untouched" "echo mine" "$(cat "$SANDBOX/al1.kept")"
@@ -993,19 +993,33 @@ if selected install; then
     want_has "install: a csw command elsewhere on PATH is not shadowed" "it is already a command" "$(cat "$SANDBOX/al2.log")"
     want "install: ...so no link is made" "no" "$(cat "$SANDBOX/al2.made")"
     want "install: --no-alias adds none" "no" "$(cat "$SANDBOX/al3")"
-    want "install: --alias picks another name" "claude-account" "$(cat "$SANDBOX/al4.link")"
+    want "install: --alias picks another name" "claude-switcher" "$(cat "$SANDBOX/al4.link")"
     want "uninstall: removes a custom short command too" "no" "$(cat "$SANDBOX/al5")"
+    (
+      export HOME="$SANDBOX/al6" CLAUDE_SWITCHER_DOWNLOAD_URL="file://$REL" PATH="$SANDBOX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      mkdir -p "$HOME/.local/bin" "$HOME/tools"; : > "$HOME/.zshrc"
+      printf '#!/bin/sh\necho theirs\n' > "$HOME/tools/other"; chmod +x "$HOME/tools/other"
+      ln -s "$HOME/tools/other" "$HOME/.local/bin/csw"
+      sh "$REPO/install.sh" > "$SANDBOX/al6.log" 2>&1
+      "$HOME/.local/bin/claude-switcher" doctor > "$SANDBOX/al6.doctor" 2>&1
+      "$HOME/.local/bin/claude-switcher" uninstall -y > /dev/null 2>&1
+      readlink "$HOME/.local/bin/csw" > "$SANDBOX/al6.link" 2>&1
+    )
+    want_has "install: a csw link to something else is not taken as ours" "skip the short command csw" "$(cat "$SANDBOX/al6.log")"
+    want_not "install: ...nor used in its suggestions" "csw setup" "$(cat "$SANDBOX/al6.log")"
+    want_not "doctor: ...nor listed as our short command" "short command: csw" "$(cat "$SANDBOX/al6.doctor")"
+    want "uninstall: ...nor removed" "$SANDBOX/al6/tools/other" "$(cat "$SANDBOX/al6.link")"
     # A whole life, then --purge: nothing of it may remain but the XDG parents.
     (
-      export HOME="$SANDBOX/life" CLAUDE_ACCOUNT_DOWNLOAD_URL="file://$REL" PATH="$SANDBOX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      export HOME="$SANDBOX/life" CLAUDE_SWITCHER_DOWNLOAD_URL="file://$REL" PATH="$SANDBOX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
       mkdir -p "$HOME/.claude" "$HOME/work"; echo you@example.com > "$HOME/.claude/.fake-login"
       echo '{"oauthAccount":{"emailAddress":"you@example.com"}}' > "$HOME/.claude.json"; printf 'export MINE=1\n' > "$HOME/.zshrc"
       (cd "$HOME" && find . | sort) > "$SANDBOX/life.before"; cp "$HOME/.claude.json" "$SANDBOX/life.cj"
       sh "$REPO/install.sh" >/dev/null 2>&1
-      B="$HOME/.local/bin/claude-account"
+      B="$HOME/.local/bin/claude-switcher"
       "$B" setup --name personal >/dev/null 2>&1
-      "$B" new work --no-login >/dev/null 2>&1; "$B" login work </dev/null >/dev/null 2>&1; "$B" use work "$HOME/work" >/dev/null 2>&1
-      mkdir -p "$HOME/.cache/claude-account"; echo '{}' > "$HOME/.cache/claude-account/update.json"
+      "$B" add work --no-login >/dev/null 2>&1; "$B" login work </dev/null >/dev/null 2>&1; "$B" use work "$HOME/work" >/dev/null 2>&1
+      mkdir -p "$HOME/.cache/claude-switcher"; echo '{}' > "$HOME/.cache/claude-switcher/update.json"
       "$B" uninstall --purge -y > "$SANDBOX/life.log" 2>&1
       (cd "$HOME" && find . | sort) > "$SANDBOX/life.after"
       cmp -s "$HOME/.zshrc" <(printf 'export MINE=1\n') && echo same > "$SANDBOX/life.rc"
@@ -1018,18 +1032,18 @@ if selected install; then
     if command -v expect >/dev/null; then
       (
         unset CI
-        export HOME="$SANDBOX/inst2" CLAUDE_ACCOUNT_DOWNLOAD_URL="file://$REL" PATH="$SANDBOX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        export HOME="$SANDBOX/inst2" CLAUDE_SWITCHER_DOWNLOAD_URL="file://$REL" PATH="$SANDBOX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         mkdir -p "$HOME/.claude"; printf 'export MINE=1\n' > "$HOME/.zshrc"
         pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- 3 ENTER > "$SANDBOX/ii0.log"
-        [ -e "$HOME/.local/bin/claude-account" ] && echo yes > "$SANDBOX/ii0.bin" || echo no > "$SANDBOX/ii0.bin"
+        [ -e "$HOME/.local/bin/claude-switcher" ] && echo yes > "$SANDBOX/ii0.bin" || echo no > "$SANDBOX/ii0.bin"
         pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- ENTER n ENTER > "$SANDBOX/ii1.log"
         pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- ENTER > "$SANDBOX/ii2.log"
         pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- 2 ENTER '~/bin2' ENTER n ENTER ENTER 1 ENTER n ENTER > "$SANDBOX/ii3.log"
-        rm -rf "$HOME/.config/claude-account" "$HOME/.local/bin/claude-account"; printf 'export MINE=1\n' > "$HOME/.zshrc"
+        rm -rf "$HOME/.config/claude-switcher" "$HOME/.local/bin/claude-switcher"; printf 'export MINE=1\n' > "$HOME/.zshrc"
         pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- ENTER ENTER s o l o ENTER n n ENTER > "$SANDBOX/ii5.log"
-        [ -x "$HOME/bin2/claude-account" ] && echo yes > "$SANDBOX/ii3.bin" || echo no > "$SANDBOX/ii3.bin"
+        [ -x "$HOME/bin2/claude-switcher" ] && echo yes > "$SANDBOX/ii3.bin" || echo no > "$SANDBOX/ii3.bin"
         pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh -s -- --uninstall" -- y ENTER > "$SANDBOX/ii4.log"
-        [ -e "$HOME/.local/bin/claude-account" ] && echo yes > "$SANDBOX/ii4.bin" || echo no > "$SANDBOX/ii4.bin"
+        [ -e "$HOME/.local/bin/claude-switcher" ] && echo yes > "$SANDBOX/ii4.bin" || echo no > "$SANDBOX/ii4.bin"
       )
       out=$(cat "$SANDBOX/ii0.log")
       want_has "install (interactive): shows the plan before changing anything" "This will:" "$out"
@@ -1037,12 +1051,12 @@ if selected install; then
       want_has "install (interactive): Cancel exits 130" "<<exit 130>>" "$out"
       want "install (interactive): ...having changed nothing" "no" "$(cat "$SANDBOX/ii0.bin")"
       out=$(cat "$SANDBOX/ii1.log")
-      want_has "install (interactive): Enter proceeds" "Installed claude-account" "$out"
+      want_has "install (interactive): Enter proceeds" "Installed claude-switcher" "$out"
       want_has "install (interactive): offers to run setup" "Set up your accounts now" "$out"
       want_has "install (interactive): ends with next steps" "Next steps" "$out"
       want_has "install (interactive): ...starting with a new terminal" "Open a new terminal" "$out"
-      want_has "install (interactive): ...and setup when it was skipped" "claude-account setup" "$out"
-      want_has "install (interactive): running it again says reinstall" "reinstall claude-account" "$(cat "$SANDBOX/ii2.log")"
+      want_has "install (interactive): ...and setup when it was skipped" "csw setup" "$out"
+      want_has "install (interactive): running it again says reinstall" "reinstall claude-switcher" "$(cat "$SANDBOX/ii2.log")"
       out=$(cat "$SANDBOX/ii3.log")
       want "install (interactive): Customize changes the folder" "yes" "$(cat "$SANDBOX/ii3.bin")"
       want_has "install (interactive): ...and without the rc file, says what to add" "eval" "$out"

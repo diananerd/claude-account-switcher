@@ -15,7 +15,7 @@ curl -fsSL https://switcher.diananerd.com | sh
 ```
 
 It shows what it will change and asks first. It also adds **`csw`**, a short
-name for the `claude-account` command; the examples below use it.
+name for the `claude-switcher` command; the examples below use it.
 
 ## Set up
 
@@ -46,19 +46,23 @@ In a folder with no account yet, it asks once and remembers the answer:
   work      you@company.com
 ```
 
-Enter takes the default; type to filter; **+ New profile** adds an account on
-the spot.
+Enter takes the default; type to filter; **+ Add an account** adds one on the
+spot.
 
 | Command | Does |
 | --- | --- |
-| `csw` | switch this project's account |
+| `csw` | switch this project's account (asks which) |
+| `csw use work` | use `work` for this project; add a folder to map that one instead |
 | `csw status` | which account applies here, and why |
-| `csw use work ~/work` | map a folder (subfolders follow) |
+| `csw add client` | add an account and log it in (`--sso` for SSO) |
 | `csw list` | your accounts and their logins |
-| `csw login client` | add or log in an account (`--sso` for SSO) |
+| `csw login client` | log an account in again, e.g. when its login expired |
+| `csw remove client` | remove an account (keeps its login unless `--purge`) |
 | `csw doctor` | check everything (`--fix` repairs) |
 | `csw update` | update to the latest release |
 
+Sessions with different accounts run side by side, each in its own terminal;
+`csw run work` starts one with a given account without changing the mapping.
 A running session keeps its account: after switching, exit and run
 `claude --continue` to resume the same conversation under the new one.
 
@@ -68,9 +72,9 @@ accept confirmations, `--json` for machine-readable output.
 ## Update and uninstall
 
 ```sh
-csw update                 # the latest stable release; keeps your accounts
-csw uninstall              # the shell integration, the command and csw
-csw uninstall --purge      # also logs out and deletes the accounts it added
+csw update              # latest release, accounts kept
+csw uninstall           # removes the tool, keeps accounts
+csw uninstall --purge   # also removes the accounts it added
 ```
 
 When a new release is out, commands you run in a terminal end with a notice.
@@ -79,17 +83,21 @@ Each command shows what it will do and asks first; `-y` skips the question.
 ## Claude Code plugin
 
 Optional. Lets Claude show or switch the project's account
-(`/claude-account:switch`) and tells Claude when a session runs under a
+(`/claude-switcher:switch`) and tells Claude when a session runs under a
 different account than its folder.
 
 ```text
 /plugin marketplace add diananerd/claude-account-switcher
-/plugin install claude-account@claude-account-switcher
+/plugin install claude-switcher@claude-account-switcher
 ```
 
-Update it with `/plugin marketplace update claude-account-switcher` and
-`/plugin update claude-account@claude-account-switcher`; remove it with
-`/plugin uninstall claude-account@claude-account-switcher`.
+To update or remove it:
+
+```text
+/plugin marketplace update claude-account-switcher
+/plugin update claude-switcher@claude-account-switcher
+/plugin uninstall claude-switcher@claude-account-switcher
+```
 
 ## Status line
 
@@ -97,7 +105,7 @@ To show the active account in Claude Code's status line, add this to your
 status line script:
 
 ```sh
-account=$(echo "$input" | claude-account statusline)   # "work" or "work (here: personal)"
+account=$(echo "$input" | claude-switcher statusline)   # "work" or "work (here: personal)"
 ```
 
 ## Limitations
@@ -107,7 +115,7 @@ account=$(echo "$input" | claude-account statusline)   # "work" or "work (here: 
 - A session cannot change account while running; relaunch with
   `claude --continue`.
 - Logging in uses whatever claude.ai account your browser is signed in to;
-  switch there (or use a private window) before `csw login`.
+  switch there (or use a private window) before `csw add` or `csw login`.
 
 ## More
 

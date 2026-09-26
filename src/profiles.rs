@@ -60,7 +60,7 @@ pub fn list(env: &Env, check: bool, json: bool) -> Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
     if rows.is_empty() {
-        println!("No profiles yet. Run: claude-account setup");
+        println!("No profiles yet. Run: claude-switcher setup");
         return Ok(ExitCode::SUCCESS);
     }
     let width = cfg.profiles.keys().map(String::len).max().unwrap_or(0);
@@ -128,7 +128,7 @@ pub fn default(env: &Env, profile: Option<String>, json: bool, interactive: bool
 
 // ------------------------------------------------------------------ new
 
-pub struct NewArgs {
+pub struct AddArgs {
     pub name: Option<String>,
     pub same_as: Option<String>,
     pub base: bool,
@@ -136,7 +136,7 @@ pub struct NewArgs {
     pub login: bool,
 }
 
-pub fn new(env: &Env, args: NewArgs, prompt: bool) -> Result<ExitCode> {
+pub fn add(env: &Env, args: AddArgs, prompt: bool) -> Result<ExitCode> {
     let name = create(env, args.name, args.same_as, args.base, args.dir, prompt)?;
     let cfg = env.load()?;
     ui::done(&format!("Profile {name}: {}", ui::describe(env, &cfg, &name)));
@@ -146,7 +146,7 @@ pub fn new(env: &Env, args: NewArgs, prompt: bool) -> Result<ExitCode> {
         if prompt && ui::confirm(&format!("Log {name} in now?"), true) == Some(true) {
             return login(env, Some(name), vec![], true);
         }
-        ui::hint(&format!("log it in: claude-account login {name}   (add --sso for SSO accounts)"));
+        ui::hint(&format!("log it in: claude-switcher login {name}   (add --sso for SSO accounts)"));
         return Ok(ExitCode::SUCCESS);
     }
     hint_use(&cfg, &name);
@@ -159,7 +159,7 @@ pub static QUIET_USE_HINT: std::sync::atomic::AtomicBool = std::sync::atomic::At
 /// After a profile becomes usable: how to start using it, unless it already is.
 fn hint_use(cfg: &Config, name: &str) {
     if !QUIET_USE_HINT.load(std::sync::atomic::Ordering::Relaxed) && !cfg.map.values().any(|p| p == name) {
-        ui::hint(&format!("use it: run claude in a project and pick {name}, or: claude-account use {name} <folder>"));
+        ui::hint(&format!("use it: run claude in a project and pick {name}, or: claude-switcher use {name} <folder>"));
     }
 }
 
@@ -180,7 +180,7 @@ pub fn create(
     let name = match name {
         Some(n) => n,
         None if prompt => ui::input("Profile name (e.g. work, personal)", None, false, check).ok_or_else(aborted)?,
-        None => return Err("usage: claude-account new <name> [--same-as <profile> | --base | --dir <path>]".into()),
+        None => return Err("usage: claude-switcher add <name> [--same-as <profile> | --base | --dir <path>]".into()),
     };
     check(&name).map_err(|e| format!("invalid profile name {name:?}: {e}"))?;
 
@@ -255,7 +255,7 @@ fn create_account_dir(env: &Env, name: &str) -> Result<PathBuf> {
     let dir = env.managed_dir(name);
     if dir.exists() {
         return Err(format!(
-            "{} already exists (left by a removed profile?). Reuse it with: claude-account new {name} --dir {}",
+            "{} already exists (left by a removed profile?). Reuse it with: claude-switcher add {name} --dir {}",
             env.tilde(&dir),
             env.tilde(&dir)
         ));
@@ -339,11 +339,11 @@ fn ask_profile(env: &Env, cfg: &Config, profile: Option<String>, prompt: bool, q
         }
         None if cfg.profiles.is_empty() => Err(crate::no_profiles()),
         None if prompt => ui::pick_profile(env, cfg, question, None).ok_or_else(aborted),
-        None => Err("usage: claude-account logout <profile> (see: claude-account list)".into()),
+        None => Err("usage: claude-switcher logout <profile> (see: claude-switcher list)".into()),
     }
 }
 
-/// The profile `login` acts on. An unknown name, or "+ New profile" in the picker,
+/// The profile `login` acts on. An unknown name, or "+ Add an account" in the picker,
 /// creates the profile first (asking what kind), so a new account is one command.
 fn login_target(env: &Env, cfg: &Config, profile: Option<String>, prompt: bool) -> Result<(String, bool)> {
     let create_new = |name: Option<String>| profiles_create(env, name, prompt).map(|n| (n, true));
@@ -352,21 +352,21 @@ fn login_target(env: &Env, cfg: &Config, profile: Option<String>, prompt: bool) 
         Some(p) => {
             valid_name(&p).map_err(|e| format!("invalid profile name {p:?}: {e}"))?;
             if !prompt {
-                return Err(format!("no such profile: {p}. Create it with: claude-account new {p}"));
+                return Err(format!("no such profile: {p}. Add it with: claude-switcher add {p}"));
             }
-            match ui::confirm(&format!("There is no profile {p}. Create it now?"), true) {
+            match ui::confirm(&format!("There is no account named {p}. Add it now?"), true) {
                 Some(true) => create_new(Some(p)),
                 _ => Err(aborted()),
             }
         }
         None if cfg.profiles.is_empty() && prompt => create_new(None),
         None if cfg.profiles.is_empty() => Err(crate::no_profiles()),
-        None if prompt => match ui::pick(env, cfg, "Log in which profile?", None, &["+ New profile"]) {
+        None if prompt => match ui::pick(env, cfg, "Log in which profile?", None, &["+ Add an account"]) {
             Some(ui::Choice::Profile(p)) => Ok((p, false)),
             Some(ui::Choice::Extra(_)) => create_new(None),
             None => Err(aborted()),
         },
-        None => Err("usage: claude-account login <profile> (see: claude-account list)".into()),
+        None => Err("usage: claude-switcher login <profile> (see: claude-switcher list)".into()),
     }
 }
 
@@ -407,7 +407,7 @@ pub fn login(env: &Env, profile: Option<String>, args: Vec<OsString>, prompt: bo
         );
     }
     let retry = if created {
-        format!("; {owner} was created but is not logged in. Retry: claude-account login {owner}")
+        format!("; {owner} was created but is not logged in. Retry: claude-switcher login {owner}")
     } else {
         String::new()
     };
@@ -427,8 +427,8 @@ pub fn login(env: &Env, profile: Option<String>, args: Vec<OsString>, prompt: bo
     if let Some(other) = dup {
         eprintln!(
             "Note: {other} is logged in to the same account. If you meant another account, run\n\
-             `claude-account login {owner}` again after switching accounts in the browser.\n\
-             If it is on purpose, `claude-account new <name> --same-as {other}` shares one login instead."
+             `claude-switcher login {owner}` again after switching accounts in the browser.\n\
+             If it is on purpose, `claude-switcher add <name> --same-as {other}` shares one login instead."
         );
     }
     hint_use(&cfg, &name);
@@ -461,7 +461,7 @@ pub fn rename(env: &Env, old: Option<String>, new: Option<String>, prompt: bool)
         None if prompt && !cfg.profiles.is_empty() => {
             ui::pick_profile(env, &cfg, "Rename which profile?", None).ok_or_else(aborted)?
         }
-        None => return Err("usage: claude-account rename <old> <new>".into()),
+        None => return Err("usage: claude-switcher rename <old> <new>".into()),
     };
     require(&cfg, &old)?;
     let new = match new {
@@ -471,7 +471,7 @@ pub fn rename(env: &Env, old: Option<String>, new: Option<String>, prompt: bool)
             if cfg.exists(n) { Err(format!("{n} already exists")) } else { Ok(()) }
         })
         .ok_or_else(aborted)?,
-        None => return Err("usage: claude-account rename <old> <new>".into()),
+        None => return Err("usage: claude-switcher rename <old> <new>".into()),
     };
     let (old, new) = (old.as_str(), new.as_str());
     valid_name(new).map_err(|e| format!("invalid profile name {new:?}: {e}"))?;
@@ -511,7 +511,7 @@ pub fn remove(env: &Env, profile: Option<String>, force: bool, purge: bool, mode
         None if prompt && !cfg.profiles.is_empty() => {
             ui::pick_profile(env, &cfg, "Remove which profile?", None).ok_or_else(aborted)?
         }
-        None => return Err("usage: claude-account remove <profile> [--force] [--purge]".into()),
+        None => return Err("usage: claude-switcher remove <profile> [--force] [--purge]".into()),
     };
     let profile = profile.as_str();
     require(&cfg, profile)?;
@@ -592,7 +592,7 @@ pub fn remove(env: &Env, profile: Option<String>, force: bool, purge: bool, mode
 
 /// Log a config dir out, or explain why nothing was deleted.
 pub fn ensure_logged_out(env: &Env, name: &str, dir: &Path) -> Result<bool> {
-    let keep = format!("nothing was deleted; log {name} out (claude-account logout {name}) and retry");
+    let keep = format!("nothing was deleted; log {name} out (claude-switcher logout {name}) and retry");
     let status = claude::auth_status(env, dir).map_err(|e| format!("cannot check {name}'s login ({e}); {keep}"))?;
     if status.logged_in {
         let ok = claude::logout(env, dir).unwrap_or(false);

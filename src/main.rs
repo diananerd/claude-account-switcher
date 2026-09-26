@@ -1,4 +1,4 @@
-//! claude-account: several Claude Code accounts on one machine, chosen per
+//! claude-switcher: several Claude Code accounts on one machine, chosen per
 //! folder. `state.rs` holds the model and the resolution rules.
 //!
 //! Every command works two ways. Headless: everything comes from arguments and
@@ -29,7 +29,7 @@ use state::{Config, Env, Result};
 
 #[derive(Parser)]
 #[command(
-    name = "claude-account",
+    name = "claude-switcher",
     version,
     about = "Run several Claude Code accounts on one machine, chosen per folder",
     long_about = "Run several Claude Code accounts on one machine, chosen per folder.\n\n\
@@ -39,15 +39,15 @@ use state::{Config, Env, Result};
         In a terminal, commands ask for whatever is missing. Without one (or with\n\
         --no-input) they never ask: pass everything as arguments.",
     after_help = "Examples:\n  \
-        claude-account setup               guided first-time setup\n  \
-        claude-account                     switch this project's profile\n  \
-        claude-account use work ~/work     everything under ~/work uses the profile work\n  \
-        claude-account login work --sso    log a profile in (creates it if it is new)\n  \
-        claude-account status --json       what applies here, for scripts\n\n\
+        claude-switcher setup               guided first-time setup\n  \
+        claude-switcher                     switch this project's profile\n  \
+        claude-switcher use work ~/work     everything under ~/work uses the profile work\n  \
+        claude-switcher add work --sso      add an account and log it in\n  \
+        claude-switcher status --json       what applies here, for scripts\n\n\
         Docs: https://github.com/diananerd/claude-account-switcher"
 )]
 struct Cli {
-    /// Never ask anything; fail with a usage error instead (also CLAUDE_ACCOUNT_NO_INPUT=1)
+    /// Never ask anything; fail with a usage error instead (also CLAUDE_SWITCHER_NO_INPUT=1)
     #[arg(long, global = true)]
     no_input: bool,
     /// Answer yes to confirmations
@@ -81,7 +81,7 @@ enum Cmd {
         profile: Option<String>,
         /// Folder (default: the project you are in, i.e. the repository root or this folder)
         dir: Option<PathBuf>,
-        /// Write a .claude-account file in the folder instead of the machine map
+        /// Write a .claude-switcher file in the folder instead of the machine map
         #[arg(long)]
         local: bool,
     },
@@ -89,7 +89,7 @@ enum Cmd {
     Forget {
         /// Folder (default: the project you are in, i.e. the repository root or this folder)
         dir: Option<PathBuf>,
-        /// Remove the .claude-account file instead of the machine mapping
+        /// Remove the .claude-switcher file instead of the machine mapping
         #[arg(long)]
         local: bool,
     },
@@ -123,8 +123,8 @@ enum Cmd {
         /// Profile to make the default (without it: show it, or pick in a terminal)
         profile: Option<String>,
     },
-    /// Create a profile: its own login, an alias (--same-as) or an existing dir
-    New {
+    /// Add an account: its own login (logged in right away), an alias (--same-as) or an existing dir
+    Add {
         /// Name for the profile: lowercase letters, digits and dashes (asked in a terminal)
         name: Option<String>,
         /// Share the login of an existing profile
@@ -136,11 +136,11 @@ enum Cmd {
         /// Adopt an existing Claude Code config dir
         #[arg(long)]
         dir: Option<PathBuf>,
-        /// Do not offer to log in afterwards
+        /// Do not log it in now
         #[arg(long)]
         no_login: bool,
     },
-    /// Log a profile in; an unknown name creates it (extra args go to `claude auth login`, e.g. --sso)
+    /// Log an account in again, e.g. when its login expired (extra args go to `claude auth login`, e.g. --sso)
     Login {
         /// Profile to log in; a new name creates it (picked in a terminal when omitted)
         profile: Option<String>,
@@ -219,7 +219,7 @@ enum Cmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<OsString>,
     },
-    /// `claude-account <profile> [dir]` is short for `claude-account use`
+    /// `claude-switcher <profile> [dir]` is short for `claude-switcher use`
     #[command(external_subcommand)]
     Other(Vec<String>),
 }
@@ -345,8 +345,8 @@ fn dispatch(env: &Env, cli: Cli) -> Result<ExitCode> {
         Some(Cmd::Prune { all }) => mapping::prune(env, all, mode),
         Some(Cmd::List { check }) => profiles::list(env, check, json),
         Some(Cmd::Default { profile }) => profiles::default(env, profile, json, prompt && !json),
-        Some(Cmd::New { name, same_as, base, dir, no_login }) => {
-            profiles::new(env, profiles::NewArgs { name, same_as, base, dir, login: !no_login }, prompt)
+        Some(Cmd::Add { name, same_as, base, dir, no_login }) => {
+            profiles::add(env, profiles::AddArgs { name, same_as, base, dir, login: !no_login }, prompt)
         }
         Some(Cmd::Login { profile, args }) => profiles::login(env, profile, args, prompt),
         Some(Cmd::Logout { profile }) => profiles::logout(env, profile, prompt),
@@ -362,7 +362,7 @@ fn dispatch(env: &Env, cli: Cli) -> Result<ExitCode> {
                     }
                     ui::pick_profile(env, &cfg, "Run claude once as", None).ok_or_else(aborted)?
                 }
-                None => return Err("usage: claude-account run <profile> [claude args]".into()),
+                None => return Err("usage: claude-switcher run <profile> [claude args]".into()),
             };
             launch::launch(env, args, Some(profile))
         }
@@ -377,7 +377,7 @@ fn dispatch(env: &Env, cli: Cli) -> Result<ExitCode> {
         Some(Cmd::Shell(ShellCmd::Uninstall)) => setup::shell_uninstall(env),
         Some(Cmd::Shell(ShellCmd::Status)) => setup::shell_status(env, json),
         Some(Cmd::Completions { shell }) => {
-            clap_complete::generate(shell, &mut Cli::command(), "claude-account", &mut std::io::stdout());
+            clap_complete::generate(shell, &mut Cli::command(), "claude-switcher", &mut std::io::stdout());
             Ok(ExitCode::SUCCESS)
         }
         Some(Cmd::Statusline) => launch::statusline(env),
@@ -392,7 +392,7 @@ fn dispatch(env: &Env, cli: Cli) -> Result<ExitCode> {
                 [name, rest @ ..] if cfg.exists(name) && rest.len() <= 1 => {
                     mapping::use_profile(env, Some(name.clone()), rest.first().map(PathBuf::from), false, prompt)
                 }
-                [name, ..] => Err(format!("unknown command or profile: {name} (see: claude-account --help)")),
+                [name, ..] => Err(format!("unknown command or profile: {name} (see: claude-switcher --help)")),
                 [] => unreachable!("clap never yields an empty external subcommand"),
             }
         }
@@ -430,7 +430,7 @@ pub fn target_dir(dir: Option<PathBuf>) -> Result<PathBuf> {
 }
 
 pub fn require(cfg: &Config, name: &str) -> Result<()> {
-    if cfg.exists(name) { Ok(()) } else { Err(format!("no such profile: {name} (see: claude-account list)")) }
+    if cfg.exists(name) { Ok(()) } else { Err(format!("no such profile: {name} (see: claude-switcher list)")) }
 }
 
 pub fn valid_name(name: &str) -> std::result::Result<(), String> {
@@ -449,14 +449,14 @@ pub fn valid_name(name: &str) -> std::result::Result<(), String> {
 }
 
 pub fn no_profiles() -> String {
-    "no profiles yet; run: claude-account setup".into()
+    "no profiles yet; run: claude-switcher setup".into()
 }
 
-/// Profile of the running Claude Code session: CLAUDE_ACCOUNT when `launch` set
+/// Profile of the running Claude Code session: CLAUDE_SWITCHER_PROFILE when `launch` set
 /// it, otherwise inferred from CLAUDE_CONFIG_DIR, preferring the profile the
 /// directory resolves to when both use the same config dir.
 pub fn session_profile(env: &Env, cfg: &Config, dir: &Path) -> Option<String> {
-    if let Some(a) = std::env::var("CLAUDE_ACCOUNT").ok().filter(|a| cfg.exists(a)) {
+    if let Some(a) = std::env::var("CLAUDE_SWITCHER_PROFILE").ok().filter(|a| cfg.exists(a)) {
         return Some(a);
     }
     let cfg_dir = std::env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).unwrap_or_else(|| env.base_dir.clone());

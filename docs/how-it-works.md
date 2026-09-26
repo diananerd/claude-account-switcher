@@ -13,14 +13,29 @@ is an independent account, and all of them stay logged in at once.
   an existing profile's login (`--same-as`).
 - The login already in `~/.claude` becomes a profile as it is; nothing moves.
   That profile runs with `CLAUDE_CONFIG_DIR` unset, exactly as before.
-- New profiles live in `~/.local/share/claude-account/profiles/<name>`. They
-  share your settings, skills, agents, commands, hooks, plugins, memory and
-  conversation history with `~/.claude` through symlinks; only the login is
-  separate. That is why `claude --continue` can resume a conversation under
-  another account.
+- Accounts you add live in `~/.local/share/claude-switcher/profiles/<name>`.
+  They hold their own login and link to your local setup in `~/.claude`
+  (see below) instead of starting empty.
+- Each `claude` process gets its account's config dir in its own environment;
+  there is no global login to swap. Sessions with different accounts therefore
+  run in parallel without affecting each other.
 - The shell integration (a marked block in your rc file) defines a `claude`
   function. It finds the profile for the current folder and runs the real
   `claude` with that profile's config dir.
+
+## What belongs where
+
+- **Your Claude account**, on Anthropic's side: the login, organization, plan,
+  usage and claude.ai connectors. Each account keeps its own; nothing mixes
+  them.
+- **The project**: its `.claude/` folder and `CLAUDE.md`, in the repository.
+  They always belong to the project, whichever account runs it.
+- **Your local setup on this machine**: `settings.json`, your global
+  `CLAUDE.md`, skills, agents, commands, hooks, plugins, and the conversation
+  history kept per folder. It is not tied to any account: every account uses
+  the same one, the way it would if you logged in and out. That is why
+  `claude --continue` resumes a conversation after you switch a project's
+  account.
 
 ## Which account applies
 
@@ -37,7 +52,7 @@ letter case on case-insensitive disks, and from git worktrees that live outside
 their repository (they follow their repository). The exact rules are in the
 [reference](reference.md#resolution).
 
-A `.claude-account` file containing a profile name pins a folder too, and can be
+A `.claude-switcher` file containing a profile name pins a folder too, and can be
 committed (`csw use <profile> --local`). The machine mapping wins over a file in
 the same folder, and a file naming a profile you do not have is ignored with a
 warning.
@@ -63,9 +78,8 @@ With Rust 1.88 or newer:
 
 ```sh
 cargo install --locked --tag vX.Y.Z \
-  --git https://github.com/diananerd/claude-account-switcher
-claude-account shell install && claude-account setup
+  --git https://github.com/diananerd/claude-account-switcher claude-account-switcher shell install && claude-switcher setup
 ```
 
 A build installed this way has no `csw`; add one with
-`ln -s claude-account ~/.cargo/bin/csw`, or use the full name.
+`ln -s claude-switcher ~/.cargo/bin/csw`, or use the full name.

@@ -24,7 +24,7 @@ fn expand(env: &Env, input: &str) -> PathBuf {
 
 // ------------------------------------------------------------------ bare command
 
-/// `claude-account` in a terminal: switch this project's profile. The current
+/// `claude-switcher` in a terminal: switch this project's profile. The current
 /// profile is preselected, so Enter keeps it; extra entries lead to the rest.
 pub fn interactive(env: &Env) -> Result<ExitCode> {
     let cfg = env.load()?;
@@ -42,7 +42,7 @@ pub fn interactive(env: &Env) -> Result<ExitCode> {
     {
         prompt.push_str(&format!(" (inherits {} from {})", h.profile, env.tilde(&h.key)));
     }
-    let extras = ["+ New profile", "  More actions"];
+    let extras = ["+ Add an account", "  More actions"];
     match ui::pick(env, &cfg, &prompt, current.as_deref(), &extras) {
         Some(ui::Choice::Profile(name)) => {
             if hit.as_ref().is_some_and(|h| h.profile == name) {
@@ -65,9 +65,9 @@ pub fn interactive(env: &Env) -> Result<ExitCode> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Some(ui::Choice::Extra(0)) => profiles::new(
+        Some(ui::Choice::Extra(0)) => profiles::add(
             env,
-            profiles::NewArgs { name: None, same_as: None, base: false, dir: None, login: true },
+            profiles::AddArgs { name: None, same_as: None, base: false, dir: None, login: true },
             true,
         ),
         Some(ui::Choice::Extra(_)) => {
@@ -127,7 +127,7 @@ pub fn next_steps(steps: &[String]) {
     }
     eprintln!("\n{}", console::style("Next steps").bold().for_stderr());
     for (i, s) in steps.iter().enumerate() {
-        eprintln!("  {}. {s}", i + 1);
+        eprintln!("  {}. {}", i + 1, ui::cmd(s));
     }
 }
 
@@ -140,7 +140,7 @@ pub fn setup(env: &Env, name: Option<String>, no_shell: bool, shell_ready: bool,
         return Err("claude not found. Install Claude Code first: https://code.claude.com/docs/en/setup".into());
     };
     if prompt {
-        say("claude-account runs several Claude Code accounts side by side, one per folder.");
+        say("claude-switcher runs several Claude Code accounts side by side, one per folder.");
         say(&format!("Found {version}."));
     }
     let mut todo: Vec<String> = vec![];
@@ -180,7 +180,7 @@ pub fn setup(env: &Env, name: Option<String>, no_shell: bool, shell_ready: bool,
                     .ok_or_else(aborted)?
                 }
                 None => {
-                    return Err("usage: claude-account setup --name <profile> (names the login in ~/.claude)".into());
+                    return Err("usage: claude-switcher setup --name <profile> (names the login in ~/.claude)".into());
                 }
             };
             profiles::create(env, Some(name.clone()), None, true, None, false)?;
@@ -189,7 +189,7 @@ pub fn setup(env: &Env, name: Option<String>, no_shell: bool, shell_ready: bool,
                 if prompt && ui::confirm(&format!("Log {name} in now?"), true) == Some(true) {
                     profiles::login(env, Some(name), vec![], true)?;
                 } else {
-                    todo.push(format!("Log it in: claude-account login {name}"));
+                    todo.push(format!("Log it in: claude-switcher login {name}"));
                 }
             }
         }
@@ -212,10 +212,10 @@ pub fn setup(env: &Env, name: Option<String>, no_shell: bool, shell_ready: bool,
                 if ui::confirm(&format!("Log {name} in now?"), true) == Some(true) {
                     if let Err(e) = profiles::login(env, Some(name.clone()), vec![], true) {
                         ui::warning(&e);
-                        todo.push(format!("Log it in: claude-account login {name}"));
+                        todo.push(format!("Log it in: claude-switcher login {name}"));
                     }
                 } else {
-                    todo.push(format!("Log it in: claude-account login {name}"));
+                    todo.push(format!("Log it in: claude-switcher login {name}"));
                 }
             }
         }
@@ -269,14 +269,14 @@ pub fn setup(env: &Env, name: Option<String>, no_shell: bool, shell_ready: bool,
     // 5. Shell integration.
     let mut reopen = shell_ready;
     if no_shell {
-        todo.push("Route `claude` through claude-account: claude-account shell install".into());
+        todo.push("Route `claude` through claude-switcher: claude-switcher shell install".into());
     } else if !shell_ready {
         let sh = match Shell::detect() {
             Some(sh) => Some(sh),
             None if prompt => pick_shell()?,
             None => {
                 ui::warning("cannot tell your shell from $SHELL; skipped the shell integration");
-                todo.push("Add the shell integration: claude-account shell install zsh|bash|fish".into());
+                todo.push("Add the shell integration: claude-switcher shell install zsh|bash|fish".into());
                 None
             }
         };
@@ -287,14 +287,14 @@ pub fn setup(env: &Env, name: Option<String>, no_shell: bool, shell_ready: bool,
                 }
             } else {
                 let rc = shell::rc_files(env, sh)[0].clone();
-                let q = format!("Route `claude` through claude-account? (adds a marked block to {})", env.tilde(&rc));
+                let q = format!("Route `claude` through claude-switcher? (adds a marked block to {})", env.tilde(&rc));
                 if !prompt || ui::confirm(&q, true) == Some(true) {
                     for (file, _) in shell::install(env, sh, None, false)? {
                         ui::done(&format!("Shell integration added to {}", env.tilde(&file)));
                     }
                     reopen = true;
                 } else {
-                    todo.push(format!("Add it later: claude-account shell install {}", sh.name()));
+                    todo.push(format!("Add it later: claude-switcher shell install {}", sh.name()));
                 }
             }
         }
@@ -304,11 +304,11 @@ pub fn setup(env: &Env, name: Option<String>, no_shell: bool, shell_ready: bool,
     profiles::list(env, false, false)?;
     let mut steps = vec![];
     if reopen {
-        steps.push("Open a new terminal, so `claude` goes through claude-account".to_string());
+        steps.push("Open a new terminal, so `claude` goes through claude-switcher".to_string());
     }
     steps.extend(todo);
     steps.push("Run claude in any project: it uses that folder's account, or asks once".into());
-    steps.push("Switch a project later with: claude-account   (check everything: claude-account doctor)".into());
+    steps.push("Switch a project later with: claude-switcher   (check everything: claude-switcher doctor)".into());
     next_steps(&steps);
     Ok(ExitCode::SUCCESS)
 }
@@ -373,7 +373,7 @@ pub fn shell_status(env: &Env, json: bool) -> Result<ExitCode> {
         let v: Vec<_> = found.iter().map(|(s, f)| json!({"shell": s.name(), "file": f})).collect();
         println!("{:#}", json!(v));
     } else if found.is_empty() {
-        println!("Not installed. Run: claude-account shell install");
+        println!("Not installed. Run: claude-switcher shell install");
     } else {
         for (s, f) in found {
             println!("{:5} {}", s.name(), env.tilde(&f));
@@ -469,7 +469,7 @@ pub fn uninstall(env: &Env, purge: bool, mode: Mode) -> Result<ExitCode> {
     let exe = std::env::current_exe().ok().and_then(|e| std::fs::canonicalize(e).ok());
     match exe {
         Some(e) if e.to_string_lossy().contains("/Cellar/") => {
-            println!("Installed with Homebrew: run `brew uninstall claude-account`.")
+            println!("Installed with Homebrew: run `brew uninstall claude-switcher`.")
         }
         Some(e) if e.starts_with(env.home.join(".cargo")) => {
             println!("Installed with cargo: run `cargo uninstall claude-account-switcher`.")
@@ -492,7 +492,7 @@ pub fn uninstall(env: &Env, purge: bool, mode: Mode) -> Result<ExitCode> {
     }
     if !purge {
         eprintln!(
-            "Profiles and logins are kept ({}, {}); `claude-account uninstall --purge` removes them.",
+            "Profiles and logins are kept ({}, {}); `claude-switcher uninstall --purge` removes them.",
             env.tilde(&env.config_file),
             env.tilde(&env.data_dir)
         );

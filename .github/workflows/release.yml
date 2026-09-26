@@ -36,13 +36,13 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          asset="claude-account-${{ matrix.target }}.tar.gz"
-          tar -czf "$asset" -C "target/${{ matrix.target }}/release" claude-account
+          asset="claude-switcher-${{ matrix.target }}.tar.gz"
+          tar -czf "$asset" -C "target/${{ matrix.target }}/release" claude-switcher
           shasum -a 256 "$asset" > "$asset.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
-          path: claude-account-${{ matrix.target }}.tar.gz*
+          path: claude-switcher-${{ matrix.target }}.tar.gz*
 
   publish:
     needs: build
@@ -77,7 +77,7 @@ jobs:
           - os: ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
     env:
-      CLAUDE_ACCOUNT_TARGET: ${{ matrix.target }}
+      CLAUDE_SWITCHER_TARGET: ${{ matrix.target }}
     steps:
       - name: Rosetta for the Intel macOS binary
         if: matrix.target == 'x86_64-apple-darwin'
@@ -85,13 +85,13 @@ jobs:
       - name: One-line install from the published release
         run: |
           export SHELL=/bin/bash
-          [ -n "$CLAUDE_ACCOUNT_TARGET" ] || unset CLAUDE_ACCOUNT_TARGET
+          [ -n "$CLAUDE_SWITCHER_TARGET" ] || unset CLAUDE_SWITCHER_TARGET
           curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/install.sh" | sh -s -- --version "$GITHUB_REF_NAME"
-          "$HOME/.local/bin/claude-account" --version | grep -F "${GITHUB_REF_NAME#v}"
-          file "$HOME/.local/bin/claude-account"
-          grep -F '>>> claude-account >>>' "$HOME/.bashrc"
+          "$HOME/.local/bin/claude-switcher" --version | grep -F "${GITHUB_REF_NAME#v}"
+          file "$HOME/.local/bin/claude-switcher"
+          grep -F '>>> claude-switcher >>>' "$HOME/.bashrc"
       - name: One-line uninstall
         run: |
           curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/install.sh" | sh -s -- --uninstall --purge
-          test ! -e "$HOME/.local/bin/claude-account"
-          ! grep -F '>>> claude-account >>>' "$HOME/.bashrc"
+          test ! -e "$HOME/.local/bin/claude-switcher"
+          ! grep -F '>>> claude-switcher >>>' "$HOME/.bashrc"

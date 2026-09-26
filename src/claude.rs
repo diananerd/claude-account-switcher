@@ -13,9 +13,9 @@ use std::process::{Command, Stdio};
 use crate::state::{Env, Result};
 
 /// The real claude: `claude` on PATH (the shell function is invisible to child
-/// processes), or CLAUDE_ACCOUNT_CLAUDE when set.
+/// processes), or CLAUDE_SWITCHER_CLAUDE when set.
 pub fn command() -> Command {
-    Command::new(std::env::var_os("CLAUDE_ACCOUNT_CLAUDE").unwrap_or_else(|| "claude".into()))
+    Command::new(std::env::var_os("CLAUDE_SWITCHER_CLAUDE").unwrap_or_else(|| "claude".into()))
 }
 
 /// A claude command bound to a config dir: the base dir runs with

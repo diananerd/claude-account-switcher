@@ -11,7 +11,7 @@ use crate::state::{Config, Env};
 /// Interactive only with a terminal on both ends and no opt-out.
 pub fn can_prompt(no_input: bool) -> bool {
     !no_input
-        && std::env::var_os("CLAUDE_ACCOUNT_NO_INPUT").is_none()
+        && std::env::var_os("CLAUDE_SWITCHER_NO_INPUT").is_none()
         && std::io::stdin().is_terminal()
         && std::io::stderr().is_terminal()
 }
@@ -24,38 +24,81 @@ pub fn init_colors() {
     }
 }
 
+/// The name this binary was run as: `csw` through the installer's short
+/// command, `claude-switcher` otherwise.
+fn invoked_name() -> String {
+    std::env::args_os()
+        .next()
+        .and_then(|a| std::path::Path::new(&a).file_name().map(|n| n.to_string_lossy().into_owned()))
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "claude-switcher".into())
+}
+
+/// Commands suggested in messages use the name the user typed: "claude-switcher
+/// add" becomes "csw add" when run as csw. Only a command followed by a
+/// subcommand or flag is rewritten; paths such as ~/.config/claude-switcher/
+/// are left alone.
+pub fn cmd(msg: &str) -> String {
+    rename_commands(msg, &invoked_name())
+}
+
+fn rename_commands(msg: &str, name: &str) -> String {
+    if name == "claude-switcher" {
+        return msg.to_string();
+    }
+    let needle = "claude-switcher ";
+    let mut out = String::with_capacity(msg.len());
+    let mut rest = msg;
+    while let Some(i) = rest.find(needle) {
+        let before = rest[..i].chars().last();
+        let after = rest[i + needle.len()..].chars().next();
+        let standalone = before.is_none_or(|c| c.is_whitespace() || "`(\"'".contains(c));
+        let is_command = after.is_some_and(|c| c.is_ascii_lowercase() || c == '-');
+        out.push_str(&rest[..i]);
+        if standalone && is_command {
+            out.push_str(name);
+            out.push(' ');
+        } else {
+            out.push_str(needle);
+        }
+        rest = &rest[i + needle.len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// `error: <msg>` on stderr, the same shape as clap's own errors.
 pub fn error(msg: &str) {
-    eprintln!("{} {msg}", console::style("error:").red().bold().for_stderr());
+    eprintln!("{} {}", console::style("error:").red().bold().for_stderr(), cmd(msg));
 }
 
 /// `warning: <msg>` on stderr.
 pub fn warning(msg: &str) {
-    eprintln!("{} {msg}", console::style("warning:").yellow().bold().for_stderr());
+    eprintln!("{} {}", console::style("warning:").yellow().bold().for_stderr(), cmd(msg));
 }
 
 /// `info: <msg>` on stderr.
 pub fn info(msg: &str) {
-    eprintln!("{} {msg}", console::style("info:").cyan().bold().for_stderr());
+    eprintln!("{} {}", console::style("info:").cyan().bold().for_stderr(), cmd(msg));
 }
 
 /// `danger: <msg>` on stderr, for what needs attention now.
 pub fn danger(msg: &str) {
-    eprintln!("{} {msg}", console::style("danger:").red().bold().for_stderr());
+    eprintln!("{} {}", console::style("danger:").red().bold().for_stderr(), cmd(msg));
 }
 
 /// `hint: <msg>` on stderr: the next thing to do.
 pub fn hint(msg: &str) {
-    eprintln!("{} {msg}", console::style("hint:").cyan().bold().for_stderr());
+    eprintln!("{} {}", console::style("hint:").cyan().bold().for_stderr(), cmd(msg));
 }
 
 /// A result line on stdout; marked with a check only on a terminal so piped
 /// output stays plain.
 pub fn done(msg: &str) {
     if std::io::stdout().is_terminal() {
-        println!("{} {msg}", console::style("✔").green());
+        println!("{} {}", console::style("✔").green(), cmd(msg));
     } else {
-        println!("{msg}");
+        println!("{}", cmd(msg));
     }
 }
 
@@ -132,4 +175,34 @@ pub fn input(
 
 pub fn confirm(prompt: &str, default: bool) -> Option<bool> {
     Confirm::with_theme(&theme()).with_prompt(prompt).default(default).interact_opt().ok().flatten()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rename_commands;
+
+    #[test]
+    fn suggested_commands_use_the_invoked_name() {
+        assert_eq!(rename_commands("run: claude-switcher add work", "csw"), "run: csw add work");
+        assert_eq!(
+            rename_commands("`claude-switcher login x` or claude-switcher --help", "csw"),
+            "`csw login x` or csw --help"
+        );
+        assert_eq!(
+            rename_commands("~/.config/claude-switcher/config.toml", "csw"),
+            "~/.config/claude-switcher/config.toml"
+        );
+        assert_eq!(
+            rename_commands("claude-switcher 0.1.0 is the latest", "csw"),
+            "claude-switcher 0.1.0 is the latest"
+        );
+        assert_eq!(
+            rename_commands("cargo uninstall claude-account-switcher", "csw"),
+            "cargo uninstall claude-account-switcher"
+        );
+        assert_eq!(
+            rename_commands("run: claude-switcher add work", "claude-switcher"),
+            "run: claude-switcher add work"
+        );
+    }
 }

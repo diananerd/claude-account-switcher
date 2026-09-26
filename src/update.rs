@@ -38,7 +38,7 @@ pub fn cache_dir(env: &Env) -> PathBuf {
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
         .unwrap_or_else(|| env.home.join(".cache"))
-        .join("claude-account")
+        .join("claude-switcher")
 }
 
 fn cache_file(env: &Env) -> PathBuf {
@@ -46,7 +46,7 @@ fn cache_file(env: &Env) -> PathBuf {
 }
 
 fn disabled() -> bool {
-    std::env::var_os("CLAUDE_ACCOUNT_NO_UPDATE_CHECK").is_some_and(|v| !v.is_empty())
+    std::env::var_os("CLAUDE_SWITCHER_NO_UPDATE_CHECK").is_some_and(|v| !v.is_empty())
 }
 
 /// A version as (major, minor, patch, pre-release suffix); a leading `v` is
@@ -99,21 +99,21 @@ pub fn behind(current: &str, latest: &str) -> Option<Level> {
 /// What to say about `current` next to the stable `latest`: (up to date, text).
 fn standing(current: &str, latest: &str) -> (bool, String) {
     match behind(current, latest) {
-        Some(_) => (false, format!("claude-account {latest} is available (you have {current})")),
+        Some(_) => (false, format!("claude-switcher {latest} is available (you have {current})")),
         None if is_prerelease(current) => (
             true,
             format!(
-                "claude-account {current} is a pre-release, newer than the latest stable {latest}; \
-                 to go back to it: claude-account update --version v{latest}"
+                "claude-switcher {current} is a pre-release, newer than the latest stable {latest}; \
+                 to go back to it: claude-switcher update --version v{latest}"
             ),
         ),
-        None => (true, format!("claude-account {current} is the latest stable release")),
+        None => (true, format!("claude-switcher {current} is the latest stable release")),
     }
 }
 
 /// Ask GitHub for the latest stable version (blocking, short timeout).
 pub fn fetch_latest() -> Result<String> {
-    let url = std::env::var("CLAUDE_ACCOUNT_UPDATE_URL").unwrap_or_else(|_| LATEST_URL.into());
+    let url = std::env::var("CLAUDE_SWITCHER_UPDATE_URL").unwrap_or_else(|_| LATEST_URL.into());
     let out = Command::new("curl")
         .args(["-fsSL", "--max-time", "5", "-H", "Accept: application/vnd.github+json", &url])
         .stdin(Stdio::null())
@@ -175,7 +175,7 @@ pub fn notice(env: &Env) {
     }
     let Some(latest) = cached.as_ref().and_then(|v| v.get("latest")).and_then(Value::as_str) else { return };
     let Some(level) = behind(CURRENT, latest) else { return };
-    let msg = format!("claude-account {latest} is available (you have {CURRENT}). Update: claude-account update");
+    let msg = format!("claude-switcher {latest} is available (you have {CURRENT}). Update: claude-switcher update");
     match level {
         Level::Patch => ui::info(&msg),
         Level::Minor => ui::warning(&format!("{msg} (new features)")),
@@ -187,7 +187,7 @@ pub fn notice(env: &Env) {
 fn managed_by(exe: &Path, env: &Env) -> Option<String> {
     let s = exe.to_string_lossy();
     if s.contains("/Cellar/") || s.contains("/homebrew/") {
-        Some("brew upgrade claude-account".into())
+        Some("brew upgrade claude-switcher".into())
     } else if exe.starts_with(env.home.join(".cargo")) {
         Some(
             "cargo install --locked --git https://github.com/diananerd/claude-account-switcher claude-account-switcher"
@@ -227,7 +227,7 @@ pub fn update(env: &Env, version: Option<String>, mode: crate::Mode) -> Result<E
         }
     }
     let dir = exe.parent().ok_or("cannot locate this binary's folder")?;
-    let url = std::env::var("CLAUDE_ACCOUNT_INSTALLER_URL").unwrap_or_else(|_| INSTALLER_URL.into());
+    let url = std::env::var("CLAUDE_SWITCHER_INSTALLER_URL").unwrap_or_else(|_| INSTALLER_URL.into());
     let mut args = vec!["-s".to_string(), "--".into(), "--bin-dir".into(), dir.to_string_lossy().into_owned()];
     if !mode.prompt || mode.yes {
         args.push("--yes".into());
@@ -259,7 +259,7 @@ pub fn doctor_line() -> Option<(bool, String, Option<String>)> {
     Some(match fetch_latest() {
         Ok(latest) => {
             let (ok, text) = standing(CURRENT, &latest);
-            (ok, text, (!ok).then(|| "claude-account update".to_string()))
+            (ok, text, (!ok).then(|| "claude-switcher update".to_string()))
         }
         Err(e) => (false, format!("could not check for updates ({e})"), Some("check your connection".into())),
     })

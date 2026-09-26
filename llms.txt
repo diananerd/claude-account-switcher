@@ -6,10 +6,10 @@ Key facts for an assistant helping a user:
 
 - A profile is a name for a Claude Code config dir with its own login, or an alias of another profile's login (`same_as`). The profile using `~/.claude` runs with CLAUDE_CONFIG_DIR unset.
 - `claude` (a shell function installed by the tool) resolves the profile of the current directory: nearest mapped ancestor wins; symlinks, letter case and git worktrees resolve to the same answer. Unmapped: a picker asks once and remembers it at the repository root.
-- A running session cannot change account. Change the mapping (`claude-account use <profile>`), then exit and run `claude --continue`.
-- Login is interactive (browser OAuth): the user runs `claude-account login <profile>` in their own terminal (an unknown name creates the profile first), or `/login` inside a session of that profile. Never run login for them.
-- Read state with `claude-account status --json` and `claude-account list --json`. Diagnose with `claude-account doctor` (also reports a newer release). Update with `claude-account update` (latest stable).
-- Config: `~/.config/claude-account/config.toml` (profiles, default, map). New accounts: `~/.local/share/claude-account/profiles/<name>`. Per-folder pin: a `.claude-account` file holding a profile name.
+- A running session cannot change account. Change the mapping (`claude-switcher use <profile>`), then exit and run `claude --continue`.
+- Login is interactive (browser OAuth): the user runs `claude-switcher login <profile>` in their own terminal (an unknown name creates the profile first), or `/login` inside a session of that profile. Never run login for them.
+- Read state with `claude-switcher status --json` and `claude-switcher list --json`. Diagnose with `claude-switcher doctor` (also reports a newer release). Update with `claude-switcher update` (latest stable).
+- Config: `~/.config/claude-switcher/config.toml` (profiles, default, map). New accounts: `~/.local/share/claude-switcher/profiles/<name>`. Per-folder pin: a `.claude-switcher` file holding a profile name.
 
 ## Docs
 
@@ -21,5 +21,5 @@ Key facts for an assistant helping a user:
 
 ## Install
 
-- `curl -fsSL https://switcher.diananerd.com | sh`, then `claude-account setup`. The installer also adds `csw`, a short name for `claude-account` (so `csw status`, `csw setup`); a cargo build has only the full name.
-- Uninstall: `claude-account uninstall [--purge]`
+- `curl -fsSL https://switcher.diananerd.com | sh`, then `claude-switcher setup`. The installer also adds `csw`, a short name for `claude-switcher` (so `csw status`, `csw setup`); a cargo build has only the full name.
+- Uninstall: `claude-switcher uninstall [--purge]`

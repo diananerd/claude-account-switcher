@@ -8,9 +8,9 @@
 //! pre-existing login, and anything launched outside this tool, keep working.
 //!
 //! Files (XDG Base Directory layout):
-//!   $XDG_CONFIG_HOME/claude-account/config.toml    profiles, default, map
-//!   $XDG_DATA_HOME/claude-account/profiles/<name>  config dirs this tool created
-//!   <any dir>/.claude-account                       local pin: a profile name
+//!   $XDG_CONFIG_HOME/claude-switcher/config.toml    profiles, default, map
+//!   $XDG_DATA_HOME/claude-switcher/profiles/<name>  config dirs this tool created
+//!   <any dir>/.claude-switcher                       local pin: a profile name
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -25,7 +25,7 @@ use crate::paths;
 pub type Result<T> = std::result::Result<T, String>;
 
 /// Name of the per-directory pin file.
-pub const LOCAL_FILE: &str = ".claude-account";
+pub const LOCAL_FILE: &str = ".claude-switcher";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -68,7 +68,7 @@ fn one() -> u32 {
 pub enum Source {
     /// The machine-wide map in config.toml.
     Map,
-    /// A `.claude-account` file in the directory.
+    /// A `.claude-switcher` file in the directory.
     File,
 }
 
@@ -98,12 +98,12 @@ fn xdg(var: &str, home: &Path, fallback: &str) -> PathBuf {
 impl Env {
     pub fn from_process() -> Result<Env> {
         let home = std::env::var_os("HOME").map(PathBuf::from).ok_or("HOME is not set")?;
-        let config_file = std::env::var_os("CLAUDE_ACCOUNT_CONFIG")
+        let config_file = std::env::var_os("CLAUDE_SWITCHER_CONFIG")
             .map(PathBuf::from)
-            .unwrap_or_else(|| xdg("XDG_CONFIG_HOME", &home, ".config").join("claude-account/config.toml"));
-        let data_dir = xdg("XDG_DATA_HOME", &home, ".local/share").join("claude-account");
+            .unwrap_or_else(|| xdg("XDG_CONFIG_HOME", &home, ".config").join("claude-switcher/config.toml"));
+        let data_dir = xdg("XDG_DATA_HOME", &home, ".local/share").join("claude-switcher");
         let base_dir =
-            std::env::var_os("CLAUDE_ACCOUNT_BASE_DIR").map(PathBuf::from).unwrap_or_else(|| home.join(".claude"));
+            std::env::var_os("CLAUDE_SWITCHER_BASE_DIR").map(PathBuf::from).unwrap_or_else(|| home.join(".claude"));
         let home_canonical = paths::canonical(&home).unwrap_or_else(|| home.clone());
         Ok(Env { home, home_canonical, config_file, data_dir, base_dir })
     }
@@ -127,7 +127,7 @@ impl Env {
     }
 
     /// Whether claude uses `dir` when CLAUDE_CONFIG_DIR is unset (`~/.claude`,
-    /// whatever CLAUDE_ACCOUNT_BASE_DIR says). Only that dir may run unset.
+    /// whatever CLAUDE_SWITCHER_BASE_DIR says). Only that dir may run unset.
     pub fn is_base(&self, dir: &Path) -> bool {
         paths::canonical(&self.home.join(".claude")).as_deref() == Some(dir)
     }
@@ -148,7 +148,7 @@ impl Env {
                     .map_err(|e| format!("{} is not valid:\n{e}", self.tilde(&self.config_file)))?;
                 if cfg.version != 1 {
                     return Err(format!(
-                        "{} has version {}; this claude-account understands version 1",
+                        "{} has version {}; this claude-switcher understands version 1",
                         self.tilde(&self.config_file),
                         cfg.version
                     ));
@@ -180,8 +180,8 @@ impl Env {
         let out = f(&mut cfg)?;
         let body = toml::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
         let text = format!(
-            "# claude-account configuration, rewritten on every change: values edited by hand\n\
-             # are kept, comments are not. `claude-account doctor` checks it.\n\
+            "# claude-switcher configuration, rewritten on every change: values edited by hand\n\
+             # are kept, comments are not. `claude-switcher doctor` checks it.\n\
              # Map keys are canonical paths (symlinks resolved).\n\n{body}"
         );
         // Write through a symlinked config (dotfile managers) instead of replacing the link.
@@ -228,7 +228,7 @@ pub fn reach(dir: &Path) -> Reach {
     }
 }
 
-/// The profile named by a `.claude-account` file: its first line that is not
+/// The profile named by a `.claude-switcher` file: its first line that is not
 /// blank or a `#` comment, trimmed.
 pub fn read_local(dir: &Path) -> Option<String> {
     let text = fs::read_to_string(dir.join(LOCAL_FILE)).ok()?;
@@ -296,7 +296,7 @@ impl Config {
     }
 
     /// First candidate directory that is mapped or pinned. At one directory the
-    /// machine map wins over a `.claude-account` file, so a committed pin can
+    /// machine map wins over a `.claude-switcher` file, so a committed pin can
     /// always be overridden locally.
     pub fn first_mapped(&self, candidates: impl IntoIterator<Item = PathBuf>) -> Option<Hit> {
         candidates.into_iter().find_map(|c| {
@@ -309,7 +309,7 @@ impl Config {
         })
     }
 
-    /// `.claude-account` files on the way up from `logical` that name a profile
+    /// `.claude-switcher` files on the way up from `logical` that name a profile
     /// that does not exist here (and so are ignored by `lookup`).
     pub fn ignored_pins(&self, logical: &Path) -> Vec<(PathBuf, String)> {
         let mut seen = Vec::new();

@@ -76,7 +76,7 @@ fn run(env: &Env, fix: bool, json: bool) -> Result<ExitCode> {
         }
     };
     if cfg.profiles.is_empty() {
-        r.warn("no profiles yet", "claude-account setup");
+        r.warn("no profiles yet", "claude-switcher setup");
     }
 
     // Profiles and logins.
@@ -103,7 +103,7 @@ fn run(env: &Env, fix: bool, json: bool) -> Result<ExitCode> {
                 r.ok(format!("{name}: relinked {}", before.missing.join(", ")));
             } else if !before.missing.is_empty() {
                 FIXABLE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                r.warn(format!("{name}: not sharing {}", before.missing.join(", ")), "claude-account doctor --fix");
+                r.warn(format!("{name}: not sharing {}", before.missing.join(", ")), "claude-switcher doctor --fix");
             }
             for c in before.conflicts {
                 r.warn(
@@ -123,20 +123,20 @@ fn run(env: &Env, fix: bool, json: bool) -> Result<ExitCode> {
                 }
                 r.ok(format!("{name}: logged in as {who}"));
             }
-            Ok(_) => r.warn(format!("{name}: not logged in"), format!("claude-account login {name}")),
+            Ok(_) => r.warn(format!("{name}: not logged in"), format!("claude-switcher login {name}")),
             Err(e) => r.warn(format!("{name}: login state unknown ({e})"), "check that claude runs"),
         }
     }
     for (email, names) in accounts.iter().filter(|(_, n)| n.len() > 1) {
         r.warn(
             format!("{} are separate logins to the same account {email}", names.join(" and ")),
-            format!("if on purpose, make one an alias: claude-account new <name> --same-as {}", names[0]),
+            format!("if on purpose, make one an alias: claude-switcher add <name> --same-as {}", names[0]),
         );
     }
     if let Some(d) = &cfg.default
         && !cfg.exists(d)
     {
-        r.warn(format!("the default profile {d} does not exist"), "claude-account default <profile>");
+        r.warn(format!("the default profile {d} does not exist"), "claude-switcher default <profile>");
     }
 
     // Mappings.
@@ -154,19 +154,19 @@ fn run(env: &Env, fix: bool, json: bool) -> Result<ExitCode> {
         } else {
             FIXABLE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let list: Vec<String> = stale.iter().map(|s| env.tilde(s)).collect();
-            r.warn(format!("mapped folders that were deleted: {}", list.join(", ")), "claude-account prune");
+            r.warn(format!("mapped folders that were deleted: {}", list.join(", ")), "claude-switcher prune");
         }
     }
     for k in &away {
         r.warn(
             format!("{} is not reachable (unmounted volume or moved parent?)", env.tilde(k)),
-            format!("if it is gone for good: claude-account forget {}", env.tilde(k)),
+            format!("if it is gone for good: claude-switcher forget {}", env.tilde(k)),
         );
     }
     for (dir, p) in cfg.map.iter().filter(|(_, p)| !cfg.exists(p)) {
         r.error(
             format!("{} is mapped to the unknown profile {p}", env.tilde(dir)),
-            format!("claude-account use <profile> {}", env.tilde(dir)),
+            format!("claude-switcher use <profile> {}", env.tilde(dir)),
         );
     }
     if let Some(here) = paths::logical_cwd() {
@@ -177,7 +177,7 @@ fn run(env: &Env, fix: bool, json: bool) -> Result<ExitCode> {
                     env.tilde(&dir),
                     state::LOCAL_FILE
                 ),
-                format!("create {p}, or override the folder: claude-account use <profile> {}", env.tilde(&dir)),
+                format!("create {p}, or override the folder: claude-switcher use <profile> {}", env.tilde(&dir)),
             );
         }
     }
@@ -186,10 +186,10 @@ fn run(env: &Env, fix: bool, json: bool) -> Result<ExitCode> {
     }
 
     // Shell integration.
-    let on_path =
-        std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d.join("claude-account").is_file()));
+    let on_path = std::env::var_os("PATH")
+        .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join("claude-switcher").is_file()));
     if on_path {
-        r.ok("claude-account is on PATH");
+        r.ok("claude-switcher is on PATH");
         if let Some(exe) = std::env::current_exe().ok().and_then(|e| std::fs::canonicalize(e).ok()) {
             let names: Vec<String> = crate::setup::short_commands(&exe)
                 .iter()
@@ -200,18 +200,18 @@ fn run(env: &Env, fix: bool, json: bool) -> Result<ExitCode> {
             }
         }
     } else {
-        r.warn("claude-account is not on PATH", "add its folder to PATH (the installer does this)");
+        r.warn("claude-switcher is not on PATH", "add its folder to PATH (the installer does this)");
     }
     match Shell::detect() {
         Some(sh) if shell::installed_in(env).iter().any(|(s, _)| *s == sh) => {
             r.ok(format!("shell integration installed for {}", sh.name()));
         }
-        Some(sh) => r.warn(format!("no shell integration for {}", sh.name()), "claude-account shell install"),
-        None => r.warn("unknown login shell", "add `eval \"$(claude-account init <shell>)\"` to your rc file"),
+        Some(sh) => r.warn(format!("no shell integration for {}", sh.name()), "claude-switcher shell install"),
+        None => r.warn("unknown login shell", "add `eval \"$(claude-switcher init <shell>)\"` to your rc file"),
     }
-    if std::env::var_os("CLAUDECODE").is_some() && std::env::var_os("CLAUDE_ACCOUNT").is_none() {
+    if std::env::var_os("CLAUDECODE").is_some() && std::env::var_os("CLAUDE_SWITCHER_PROFILE").is_none() {
         r.warn(
-            "this Claude Code session was not started through claude-account",
+            "this Claude Code session was not started through claude-switcher",
             "open a new terminal so the shell integration loads, then relaunch claude",
         );
     }
@@ -242,9 +242,9 @@ fn finish(r: Report, json: bool) -> Result<ExitCode> {
                 Level::Warn => "warn",
                 Level::Error => "FAIL",
             };
-            println!("{mark}  {m}");
+            println!("{mark}  {}", crate::ui::cmd(m));
             if let Some(f) = f {
-                println!("      -> {f}");
+                println!("      -> {}", crate::ui::cmd(f));
             }
         }
     }

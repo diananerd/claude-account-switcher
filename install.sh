@@ -1,5 +1,5 @@
 #!/bin/sh
-# claude-account installer
+# claude-switcher installer
 #
 #   curl -fsSL https://switcher.diananerd.com | sh
 #
@@ -23,14 +23,14 @@ DOCS="https://switcher.diananerd.com"
 ISSUES="https://github.com/$REPO/issues"
 RELEASES="https://github.com/$REPO/releases"
 CLAUDE_DOCS="https://code.claude.com/docs/en/setup"
-BIN_NAME="claude-account"
-BIN_DIR="${CLAUDE_ACCOUNT_BIN_DIR:-${HOME:-}/.local/bin}"
-VERSION="${CLAUDE_ACCOUNT_VERSION:-latest}"
+BIN_NAME="claude-switcher"
+BIN_DIR="${CLAUDE_SWITCHER_BIN_DIR:-${HOME:-}/.local/bin}"
+VERSION="${CLAUDE_SWITCHER_VERSION:-latest}"
 # Base URL holding the release assets; overridable for mirrors and tests.
-DOWNLOAD_URL="${CLAUDE_ACCOUNT_DOWNLOAD_URL:-}"
+DOWNLOAD_URL="${CLAUDE_SWITCHER_DOWNLOAD_URL:-}"
 MODIFY_RC=1
 # A short command next to the binary (a symlink), so `csw status` works too.
-ALIAS="${CLAUDE_ACCOUNT_ALIAS-csw}"
+ALIAS="${CLAUDE_SWITCHER_ALIAS-csw}"
 ACTION=install
 PURGE=""
 YES=0
@@ -39,7 +39,7 @@ CHANGED=0
 
 usage() {
   cat <<'EOF'
-claude-account installer
+claude-switcher installer
 
 Usage:
   curl -fsSL https://switcher.diananerd.com | sh
@@ -193,8 +193,8 @@ sha256_of() {
 }
 
 detect_target() {
-  if [ -n "${CLAUDE_ACCOUNT_TARGET:-}" ]; then
-    TARGET="$CLAUDE_ACCOUNT_TARGET"
+  if [ -n "${CLAUDE_SWITCHER_TARGET:-}" ]; then
+    TARGET="$CLAUDE_SWITCHER_TARGET"
     return
   fi
   arch=$(uname -m)
@@ -206,7 +206,7 @@ detect_target() {
       fi ;;
     Linux) os_part="unknown-linux-musl" ;;
     MINGW*|MSYS*|CYGWIN*) fail "Windows is not supported directly." "use WSL: https://learn.microsoft.com/windows/wsl/install" ;;
-    *) fail "unsupported system: $OS." "claude-account runs on macOS and Linux" ;;
+    *) fail "unsupported system: $OS." "claude-switcher runs on macOS and Linux" ;;
   esac
   case "$arch" in
     arm64|aarch64) arch_part="aarch64" ;;
@@ -229,10 +229,10 @@ preflight() {
     /*) ;;
     *) fail "--bin-dir must be an absolute path (got: $BIN_DIR)." ;;
   esac
-  if [ "$OS" = Darwin ] && [ -z "${CLAUDE_ACCOUNT_TARGET:-}" ]; then
+  if [ "$OS" = Darwin ] && [ -z "${CLAUDE_SWITCHER_TARGET:-}" ]; then
     major=$(sw_vers -productVersion 2>/dev/null | cut -d. -f1)
     if [ -n "$major" ] && [ "$major" -lt 11 ] 2>/dev/null; then
-      fail "macOS $(sw_vers -productVersion) is too old." "claude-account needs macOS 11 (Big Sur) or newer"
+      fail "macOS $(sw_vers -productVersion) is too old." "claude-switcher needs macOS 11 (Big Sur) or newer"
     fi
   fi
   # The install folder, or its nearest existing parent, must be writable.
@@ -270,14 +270,14 @@ show_state() {
   if have claude; then
     say "  Claude Code    $(claude --version 2>/dev/null | head -1 | cut -d' ' -f1) at $(tilde "$(command -v claude)")"
   else
-    say "  Claude Code    ${Y}not found${N} (needed to use claude-account: $CLAUDE_DOCS)"
+    say "  Claude Code    ${Y}not found${N} (needed to use claude-switcher: $CLAUDE_DOCS)"
   fi
   OLD_VERSION=""
   if [ -x "$BIN_DIR/$BIN_NAME" ]; then
     OLD_VERSION=$("$BIN_DIR/$BIN_NAME" --version 2>/dev/null | cut -d' ' -f2) || OLD_VERSION="unknown"
-    say "  claude-account $OLD_VERSION in $(tilde "$BIN_DIR")"
+    say "  claude-switcher $OLD_VERSION in $(tilde "$BIN_DIR")"
   else
-    say "  claude-account not installed in $(tilde "$BIN_DIR")"
+    say "  claude-switcher not installed in $(tilde "$BIN_DIR")"
   fi
   other=$(command -v "$BIN_NAME" 2>/dev/null || true)
   if [ -n "$other" ] && [ "$other" != "$BIN_DIR/$BIN_NAME" ]; then
@@ -362,7 +362,7 @@ alias_plan() {
   if [ -n "$other" ]; then
     ALIAS_ACTION=taken; printf 'skip the short command %s: it is already a command (%s)\n' "$ALIAS" "$(tilde "$other")"; return 0
   fi
-  ALIAS_ACTION=add; printf 'add the short command %s (a link to claude-account)\n' "$ALIAS"
+  ALIAS_ACTION=add; printf 'add the short command %s (a link to claude-switcher)\n' "$ALIAS"
 }
 
 # ------------------------------------------------------------------ install
@@ -380,12 +380,12 @@ install() {
     base="https://github.com/$REPO/releases/download/$VERSION"
   fi
 
-  TMP=$(mktemp -d 2>/dev/null || mktemp -d -t claude-account)
+  TMP=$(mktemp -d 2>/dev/null || mktemp -d -t claude-switcher)
   # Always leave no temp files, and no half-copied binary next to the real one.
   trap 'rm -rf "$TMP"; rm -f "$BIN_DIR/.$BIN_NAME.new" "$BIN_DIR/.${ALIAS:-_}.new"' EXIT
   trap 'exit 130' INT TERM
 
-  say "${B}claude-account installer${N}"
+  say "${B}claude-switcher installer${N}"
   show_state
 
   # 1. Download, verify, and see it run: nothing on the machine changes yet.
@@ -404,7 +404,7 @@ install() {
   chmod 755 "$TMP/$BIN_NAME"
   new_version=$("$TMP/$BIN_NAME" --version 2>/dev/null | cut -d' ' -f2) \
     || fail "the downloaded binary does not run on this machine ($TARGET)." "report it with your system details: $ISSUES"
-  ok "Verified claude-account $new_version for $TARGET"
+  ok "Verified claude-switcher $new_version for $TARGET"
 
   # 2. The plan; interactive runs choose Proceed, Customize or Cancel.
   while :; do
@@ -421,9 +421,9 @@ install() {
     say ""
     say "This will:"
     case "$verb" in
-      install) say "  - install claude-account $new_version to $(tilde "$BIN_DIR")" ;;
-      reinstall) say "  - reinstall claude-account $new_version in $(tilde "$BIN_DIR")" ;;
-      *) say "  - $verb claude-account $OLD_VERSION -> $new_version in $(tilde "$BIN_DIR")" ;;
+      install) say "  - install claude-switcher $new_version to $(tilde "$BIN_DIR")" ;;
+      reinstall) say "  - reinstall claude-switcher $new_version in $(tilde "$BIN_DIR")" ;;
+      *) say "  - $verb claude-switcher $OLD_VERSION -> $new_version in $(tilde "$BIN_DIR")" ;;
     esac
     say "  - $(rc_plan "$TMP/$BIN_NAME")"
     alias_line=$(alias_plan); alias_plan >/dev/null
@@ -460,10 +460,10 @@ install() {
   cp "$TMP/$BIN_NAME" "$BIN_DIR/.$BIN_NAME.new" || fail "cannot write to $(tilde "$BIN_DIR")." "check the free space and permissions there"
   mv -f "$BIN_DIR/.$BIN_NAME.new" "$BIN_DIR/$BIN_NAME" || fail "cannot replace $(tilde "$BIN_DIR/$BIN_NAME")."
   case "$verb" in
-    install) ok "Installed claude-account $new_version to $(tilde "$BIN_DIR")" ;;
-    reinstall) ok "Reinstalled claude-account $new_version in $(tilde "$BIN_DIR")" ;;
-    upgrade) ok "Upgraded claude-account $OLD_VERSION -> $new_version in $(tilde "$BIN_DIR")" ;;
-    downgrade) ok "Downgraded claude-account $OLD_VERSION -> $new_version in $(tilde "$BIN_DIR")" ;;
+    install) ok "Installed claude-switcher $new_version to $(tilde "$BIN_DIR")" ;;
+    reinstall) ok "Reinstalled claude-switcher $new_version in $(tilde "$BIN_DIR")" ;;
+    upgrade) ok "Upgraded claude-switcher $OLD_VERSION -> $new_version in $(tilde "$BIN_DIR")" ;;
+    downgrade) ok "Downgraded claude-switcher $OLD_VERSION -> $new_version in $(tilde "$BIN_DIR")" ;;
   esac
   case "$ALIAS_ACTION" in
     add)
@@ -478,6 +478,9 @@ install() {
       ;;
     taken) warn "$alias_line; choose another with --alias NAME" ;;
   esac
+  # Suggest the short command once it exists.
+  SHORT="$BIN_NAME"
+  if [ "$ALIAS_ACTION" = add ] || [ "$ALIAS_ACTION" = keep ]; then SHORT="$ALIAS"; fi
   rc_changed=0
   rc_file=""
   if [ "$MODIFY_RC" = 1 ]; then
@@ -488,7 +491,7 @@ install() {
       rc_file=$(printf '%s\n' "$out" | tail -1 | sed 's/.* \([^ ]*\)$/\1/')
     else
       warn "the shell integration was not added: $(sed 's/^[^:]*: //' "$TMP/shell.err" | tail -1)"
-      warn "claude-account is installed; add the integration later with: claude-account shell install"
+      warn "claude-switcher is installed; add the integration later with: $SHORT shell install"
     fi
   fi
 
@@ -508,23 +511,24 @@ install() {
   ran_setup=0
   if [ "$INTERACTIVE" = 1 ] && [ "$has_profiles" = 0 ] && have claude; then
     say ""
-    if ask "Set up your accounts now (claude-account setup)?" Y; then
+    if ask "Set up your accounts now ($SHORT setup)?" Y; then
       # setup prints the single "Next steps"; tell it what happened to the shell.
       # (just added -> open a new terminal first; skipped by choice -> say how to add it;
       # already there -> setup sees it itself).
       set --
       if [ "$rc_changed" = 1 ]; then set -- --shell-ready; elif [ "$MODIFY_RC" = 0 ]; then set -- --no-shell; fi
-      if "$BIN_DIR/$BIN_NAME" setup "$@" </dev/tty; then
+      # Run through the short command, so setup's own hints use it too.
+      if "$BIN_DIR/$SHORT" setup "$@" </dev/tty; then
         ran_setup=1
       else
-        warn "setup did not finish; run it again with: claude-account setup"
+        warn "setup did not finish; run it again with: $SHORT setup"
       fi
     fi
   fi
 
   if [ "$ran_setup" = 1 ]; then
     if [ "$MODIFY_RC" = 0 ] && ! on_path "$BIN_DIR"; then
-      warn "$(tilde "$BIN_DIR") is not on your PATH; add it so the claude-account command is found."
+      warn "$(tilde "$BIN_DIR") is not on your PATH; add it so the claude-switcher command is found."
     fi
     closing
     return
@@ -539,13 +543,13 @@ install() {
   if [ "$rc_changed" = 1 ]; then
     say "  $n. Open a new terminal (or run: source $rc_file)"; n=$((n + 1))
   elif [ "$MODIFY_RC" = 0 ]; then
-    say "  $n. Add to your shell rc file: eval \"\$(claude-account init zsh)\"   ${DIM}(or bash, fish)${N}"; n=$((n + 1))
+    say "  $n. Add to your shell rc file: eval \"\$(claude-switcher init zsh)\"   ${DIM}(or bash, fish)${N}"; n=$((n + 1))
     if ! on_path "$BIN_DIR"; then say "  $n. Put $(tilde "$BIN_DIR") on your PATH"; n=$((n + 1)); fi
   fi
   if [ "$has_profiles" = 1 ]; then
-    say "  $n. Your profiles and mappings are unchanged. Check everything: ${C}claude-account doctor${N}"
+    say "  $n. Your profiles and mappings are unchanged. Check everything: ${C}$SHORT doctor${N}"
   else
-    say "  $n. Run ${C}claude-account setup${N} to name your accounts, log them in and map folders"; n=$((n + 1))
+    say "  $n. Run ${C}$SHORT setup${N} to name your accounts, log them in and map folders"; n=$((n + 1))
     say "  $n. Run ${C}claude${N} in any project: it uses that folder's account, or asks once"
   fi
   closing
@@ -555,10 +559,10 @@ install() {
 closing() {
   if [ "$ALIAS_ACTION" = add ] || [ "$ALIAS_ACTION" = keep ]; then
     say ""
-    say "Tip: ${C}$ALIAS${N} is short for claude-account, e.g. ${C}$ALIAS status${N}."
+    say "Tip: ${C}$ALIAS${N} is short for claude-switcher, e.g. ${C}$ALIAS status${N}."
   fi
   say ""
-  info "Help: claude-account --help · Docs: $DOCS"
+  info "Help: claude-switcher --help · Docs: $DOCS"
 }
 
 # ------------------------------------------------------------------ uninstall
@@ -571,7 +575,7 @@ uninstall() {
     bin=$(command -v "$BIN_NAME")
   fi
   if [ -z "$bin" ]; then
-    say "claude-account is not installed in $(tilde "$BIN_DIR") nor on PATH; nothing to do."
+    say "claude-switcher is not installed in $(tilde "$BIN_DIR") nor on PATH; nothing to do."
     exit 0
   fi
   # The binary knows every file it touched: it shows the plan, asks (default

@@ -6,7 +6,7 @@ the project is provided as-is and takes no contributions. Users of the tool want
 
 ## What it is
 
-A Rust CLI, `claude-account`, that picks a Claude Code config dir
+A Rust CLI, `claude-switcher`, that picks a Claude Code config dir
 (`CLAUDE_CONFIG_DIR`) per directory, plus a POSIX installer and an optional
 Claude Code plugin. Unix-like only.
 
@@ -85,7 +85,7 @@ newer Rust, never leave it claiming less).
    `cargo build` (updates `Cargo.lock`), add `## [X.Y.Z] - YYYY-MM-DD` to
    `CHANGELOG.md`. `scripts/check-release.sh` must pass.
 2. Commit, push, wait for CI to pass.
-3. `git tag -a vX.Y.Z -m "claude-account X.Y.Z" && git push origin vX.Y.Z`.
+3. `git tag -a vX.Y.Z -m "claude-switcher X.Y.Z" && git push origin vX.Y.Z`.
 
 `.github/workflows/release.yml` then checks the tag with
 `scripts/check-release.sh vX.Y.Z`, builds the four targets, publishes the

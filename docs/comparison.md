@@ -16,8 +16,8 @@ so the account should follow the project, fixed and without thinking about it.
   through symlinks, letter case and git worktrees. No state that depends on
   which account you used last.
 - **Good defaults.** In a folder with no account yet, `claude` asks once and
-  remembers. Every login stays live, and your settings, skills, plugins and
-  history are shared, so switching projects never means logging in again.
+  remembers. Every login stays live, and every account uses your one local
+  setup, so switching projects never means logging in or configuring again.
 
 It is **not** built for pooling several accounts to stretch rate limits,
 rotating accounts inside one project, or tracking usage and cost. If that is
@@ -30,7 +30,7 @@ what you need, the tools below that focus on it will serve you better.
 | Swap the global login | One login at a time; switching replaces it for the whole machine, running sessions included | claude-swap, cc-account-switcher, CCSwitcher, ClaudeCodeMultiAccounts |
 | Rotate for limits | Moves to another account when one hits its limit, often with usage dashboards | claude-swap, clauth, the fairy-pitta fork of cc-account-switcher |
 | Profile per launch | A config dir per profile; you pick it with an alias, a flag or a command each time | shell aliases, ccprofile, claude-account-switch (ftery0) |
-| Profile per folder | A config dir per profile, chosen by the folder you are in | claude-account, claude-code-profiles, cpm |
+| Profile per folder | A config dir per profile, chosen by the folder you are in | claude-switcher, claude-code-profiles, cpm |
 
 ## Tools
 
@@ -38,7 +38,7 @@ As of September 2026, from each project's own documentation.
 
 | Tool | Mechanism | Granularity | Focus |
 | --- | --- | --- | --- |
-| [claude-account](https://github.com/diananerd/claude-account-switcher) | One `CLAUDE_CONFIG_DIR` per account; the `claude` shell function picks it | Per folder, central mapping (plus optional pin files); asks once where unmapped | Separate accounts by purpose |
+| [claude-switcher](https://github.com/diananerd/claude-account-switcher) | One `CLAUDE_CONFIG_DIR` per account; the `claude` shell function picks it | Per folder, central mapping (plus optional pin files); asks once where unmapped | Separate accounts by purpose |
 | [claude-code-profiles](https://github.com/pegasusheavy/claude-code-profiles) | One `CLAUDE_CONFIG_DIR` per profile, set by a wrapper | Global, per shell, or per folder through a `.claude-profile` file and a cd hook | Separate accounts by purpose |
 | [cpm](https://github.com/JakubKontra/claude-profile-manager) | One `CLAUDE_CONFIG_DIR` per profile, a wrapper per profile | Per command, or per folder through a `.claude-profile` file and a cd hook | Separate accounts by purpose |
 | [claude-account-switch](https://github.com/ftery0/claude-account-switch) | One `CLAUDE_CONFIG_DIR` per profile | Per shell | Separate accounts by purpose |
@@ -54,16 +54,17 @@ claude-code-profiles and cpm share the idea of choosing the account by folder.
 The differences that matter day to day:
 
 - **Where the mapping lives.** They read a `.claude-profile` file in the
-  project. claude-account keeps one central mapping, so nothing is added to your
+  project. claude-switcher keeps one central mapping, so nothing is added to your
   repositories; a pin file is optional, for teams that want it committed.
-- **A folder with no account yet.** claude-account asks once, with the default
+- **A folder with no account yet.** claude-switcher asks once, with the default
   preselected, and remembers the answer for the whole repository.
-- **Resolution.** claude-account resolves a folder identically however you
+- **Resolution.** claude-switcher resolves a folder identically however you
   reach it: through symlinks, in any letter case on case-insensitive disks, and
   from git worktrees outside their repository.
-- **What stays shared.** claude-account shares settings, skills, agents,
-  commands, hooks, plugins and conversation history across accounts through
-  symlinks; only the login is separate.
+- **What each account uses.** With claude-switcher every account uses your one
+  local setup (settings, skills, agents, commands, hooks, plugins, conversation
+  history); only the login differs. Your accounts' own data, on Anthropic's
+  side, is never mixed.
 - **Operations.** An installer that shows its plan and converges when run again,
   `doctor`, `update`, and every command usable both interactively and in
   scripts.

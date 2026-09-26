@@ -9,9 +9,9 @@
   },
   "plugins": [
     {
-      "name": "claude-account",
+      "name": "claude-switcher",
       "source": "./plugin",
-      "description": "Show or switch the Claude Code account a project uses, and get told when a session runs under the wrong one. Needs the claude-account CLI."
+      "description": "Show or switch the Claude Code account a project uses, and get told when a session runs under the wrong one. Needs the claude-switcher CLI."
     }
   ]
 }
