@@ -15,7 +15,8 @@ side, and `claude` picks the right one from where you run it.
 
 > Unix-like systems only (macOS, Linux; Windows through WSL). **Tested on macOS.**
 >
-> Docs: <https://switcher.diananerd.com>
+> Docs: <https://switcher.diananerd.com> ·
+> [How it compares to other tools](docs/comparison.md)
 
 ## Install
 

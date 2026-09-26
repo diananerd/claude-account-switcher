@@ -38,6 +38,18 @@ jobs:
         if: runner.os == 'Linux'
         run: cd docs && npm ci && npm run build
 
+  # The Claude Code plugin and the marketplace that lists it, checked by
+  # Claude Code itself (no login needed).
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: claude plugin validate . && claude plugin validate ./plugin
+
   # The oldest Rust the crate claims to build with (rust-version in Cargo.toml).
   msrv:
     runs-on: ubuntu-latest

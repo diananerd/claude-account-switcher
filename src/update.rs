@@ -33,12 +33,16 @@ fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
-fn cache_file(env: &Env) -> PathBuf {
+pub fn cache_dir(env: &Env) -> PathBuf {
     std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
         .unwrap_or_else(|| env.home.join(".cache"))
-        .join("claude-account/update.json")
+        .join("claude-account")
+}
+
+fn cache_file(env: &Env) -> PathBuf {
+    cache_dir(env).join("update.json")
 }
 
 fn disabled() -> bool {

@@ -70,6 +70,9 @@ enum Cmd {
         /// Do not add the shell integration
         #[arg(long)]
         no_shell: bool,
+        /// The caller has just set up the shell integration (the installer)
+        #[arg(long, hide = true, conflicts_with = "no_shell")]
+        shell_ready: bool,
     },
 
     /// Map this project (or DIR) to a profile
@@ -333,7 +336,7 @@ fn dispatch(env: &Env, cli: Cli) -> Result<ExitCode> {
     match cli.cmd {
         None if prompt => setup::interactive(env),
         None => mapping::status(env, None, json),
-        Some(Cmd::Setup { name, no_shell }) => setup::setup(env, name, no_shell, mode),
+        Some(Cmd::Setup { name, no_shell, shell_ready }) => setup::setup(env, name, no_shell, shell_ready, mode),
         Some(Cmd::Use { profile, dir, local }) => mapping::use_profile(env, profile, dir, local, prompt),
         Some(Cmd::Forget { dir, local }) => mapping::forget(env, dir, local),
         Some(Cmd::Status { dir }) => mapping::status(env, dir, json),

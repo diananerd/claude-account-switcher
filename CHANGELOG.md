@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-09-25
+
+### Fixed
+
+- `uninstall --purge` leaves nothing behind: it also deletes the update cache
+  and the folders it had created in `~/.claude` (only while still empty).
+- Logging a profile out reports it by name instead of passing `claude`'s own
+  output through.
+- When the installer runs `setup`, there is one "Next steps" list, with opening
+  a new terminal first, and no empty shell step.
+- The rc block puts `"$HOME/.local/bin"` on PATH instead of an absolute path.
+
+### Added
+
+- A comparison with other tools in the docs.
+- CI validates the plugin and marketplace with `claude plugin validate`.
+
 ## [0.1.1] - 2026-09-25
 
 ### Fixed

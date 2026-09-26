@@ -1,6 +1,6 @@
 {
   "name": "claude-account",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Show or switch the Claude Code account a project uses, and get told when a session runs under the wrong one. Needs the claude-account CLI.",
   "author": {
     "name": "Diana Nerd",

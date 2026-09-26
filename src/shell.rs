@@ -108,14 +108,41 @@ pub fn rc_files(env: &Env, shell: Shell) -> Vec<PathBuf> {
     }
 }
 
-fn block(shell: Shell, path_dir: Option<&Path>) -> String {
+/// A folder for the rc block: `"$HOME/..."` when it is inside the home (so the
+/// line stays right if the home moves), else a single-quoted literal.
+fn path_literal(shell: Shell, dir: &Path, homes: &[&Path]) -> String {
+    for h in homes {
+        if let Ok(rest) = dir.strip_prefix(h) {
+            let rest = rest.to_string_lossy();
+            let escaped: String = rest
+                .chars()
+                .flat_map(|c| match (shell, c) {
+                    (_, '"' | '\\' | '$') | (Shell::Zsh | Shell::Bash, '`') => vec!['\\', c],
+                    _ => vec![c],
+                })
+                .collect();
+            return if rest.is_empty() { "\"$HOME\"".into() } else { format!("\"$HOME/{escaped}\"") };
+        }
+    }
+    match shell {
+        Shell::Fish => fish_quote(&dir.to_string_lossy()),
+        _ => sh_quote(&dir.to_string_lossy()),
+    }
+}
+
+fn block(shell: Shell, path_dir: Option<&Path>, homes: &[&Path]) -> String {
     let mut lines =
         vec![BEGIN.to_string(), "# Managed by claude-account; remove with `claude-account shell uninstall`.".into()];
     match shell {
         Shell::Zsh | Shell::Bash => {
             if let Some(d) = path_dir {
-                let q = sh_quote(&d.to_string_lossy());
-                lines.push(format!("case \":$PATH:\" in *:{q}:*) ;; *) export PATH={q}\":$PATH\" ;; esac"));
+                let q = path_literal(shell, d, homes);
+                // "$HOME/x" joins the rest of PATH inside the same quotes.
+                let export = match q.strip_prefix('"').and_then(|r| r.strip_suffix('"')) {
+                    Some(inner) => format!("export PATH=\"{inner}:$PATH\""),
+                    None => format!("export PATH={q}\":$PATH\""),
+                };
+                lines.push(format!("case \":$PATH:\" in *:{q}:*) ;; *) {export} ;; esac"));
             }
             lines.push(format!(
                 "if command -v claude-account >/dev/null 2>&1; then eval \"$(claude-account init {})\"; fi",
@@ -124,7 +151,7 @@ fn block(shell: Shell, path_dir: Option<&Path>) -> String {
         }
         Shell::Fish => {
             if let Some(d) = path_dir {
-                lines.push(format!("fish_add_path --global --path {}", fish_quote(&d.to_string_lossy())));
+                lines.push(format!("fish_add_path --global --path {}", path_literal(shell, d, homes)));
             }
             lines.push("if type -q claude-account; claude-account init fish | source; end".into());
         }
@@ -198,7 +225,7 @@ pub enum Change {
 /// Add or refresh the managed block. Replaces an existing block in place.
 /// With `dry_run`, only report what would change.
 pub fn install(env: &Env, shell: Shell, path_dir: Option<&Path>, dry_run: bool) -> Result<Vec<(PathBuf, Change)>> {
-    let new_block = block(shell, path_dir);
+    let new_block = block(shell, path_dir, &[env.home.as_path(), env.home_canonical.as_path()]);
     let mut done = vec![];
     for rc in rc_files(env, shell) {
         if shell == Shell::Bash && rc.ends_with(".bash_profile") && !rc.exists() {
@@ -272,7 +299,7 @@ mod tests {
     use super::*;
 
     fn round_trip(old: &str) -> String {
-        let b = block(Shell::Zsh, None);
+        let b = block(Shell::Zsh, None, &[]);
         let installed = format!("{old}{}{b}", separator(old));
         let range = find_block(&installed).unwrap().unwrap();
         remove(&installed, range)
@@ -304,8 +331,14 @@ mod tests {
 
     #[test]
     fn block_only_adds_path_when_asked() {
-        assert!(!block(Shell::Zsh, None).contains("PATH"));
-        assert!(block(Shell::Bash, Some(Path::new("/o p/bin"))).contains("export PATH='/o p/bin'\":$PATH\""));
-        assert!(block(Shell::Fish, None).contains("claude-account init fish | source"));
+        assert!(!block(Shell::Zsh, None, &[]).contains("PATH"));
+        assert!(block(Shell::Bash, Some(Path::new("/o p/bin")), &[]).contains("export PATH='/o p/bin'\":$PATH\""));
+        assert!(block(Shell::Fish, None, &[]).contains("claude-account init fish | source"));
+        let home = Path::new("/Users/you");
+        assert!(
+            block(Shell::Zsh, Some(Path::new("/Users/you/.local/bin")), &[home])
+                .contains("export PATH=\"$HOME/.local/bin:$PATH\"")
+        );
+        assert_eq!(path_literal(Shell::Zsh, Path::new("/Users/you/a $b"), &[home]), "\"$HOME/a \\$b\"");
     }
 }

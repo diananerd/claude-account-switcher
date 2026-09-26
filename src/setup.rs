@@ -30,7 +30,7 @@ pub fn interactive(env: &Env) -> Result<ExitCode> {
     let cfg = env.load()?;
     if cfg.profiles.is_empty() {
         say("No profiles yet; let's set them up.\n");
-        return setup(env, None, false, Mode { prompt: true, yes: false });
+        return setup(env, None, false, false, Mode { prompt: true, yes: false });
     }
     let here = cwd()?;
     let root = state::project_root(&here).unwrap_or_else(|| here.clone());
@@ -123,7 +123,7 @@ pub fn next_steps(steps: &[String]) {
 /// First-time setup. Interactive: five short steps, each with its answer
 /// preselected. Headless (`--name`): adopt ~/.claude under that name and add the
 /// shell integration; everything else is a separate command.
-pub fn setup(env: &Env, name: Option<String>, no_shell: bool, mode: Mode) -> Result<ExitCode> {
+pub fn setup(env: &Env, name: Option<String>, no_shell: bool, shell_ready: bool, mode: Mode) -> Result<ExitCode> {
     let prompt = mode.prompt;
     let Some(version) = claude::version() else {
         return Err("claude not found. Install Claude Code first: https://code.claude.com/docs/en/setup".into());
@@ -133,13 +133,15 @@ pub fn setup(env: &Env, name: Option<String>, no_shell: bool, mode: Mode) -> Res
         say(&format!("Found {version}."));
     }
     let mut todo: Vec<String> = vec![];
+    // The shell step only counts when setup does it itself.
+    let total = if no_shell || shell_ready { 4 } else { 5 };
     profiles::QUIET_USE_HINT.store(true, std::sync::atomic::Ordering::Relaxed);
 
     // 1. Give the login Claude Code already has a name.
     let cfg = env.load()?;
     let base_owner = env.base_canonical().and_then(|b| cfg.profiles_for_dir(&b).into_iter().next());
     if prompt {
-        ui::step(1, 5, "Your current Claude Code login");
+        ui::step(1, total, "Your current Claude Code login");
     }
     match base_owner {
         Some(owner) => {
@@ -184,7 +186,7 @@ pub fn setup(env: &Env, name: Option<String>, no_shell: bool, mode: Mode) -> Res
 
     if prompt {
         // 2. More accounts.
-        ui::step(2, 5, "Other Claude accounts");
+        ui::step(2, total, "Other Claude accounts");
         loop {
             let n = env.load()?.profiles.len();
             let q = if n <= 1 { "Add another Claude account?" } else { "Add one more?" };
@@ -208,7 +210,7 @@ pub fn setup(env: &Env, name: Option<String>, no_shell: bool, mode: Mode) -> Res
         }
 
         // 3. Default for unmapped folders.
-        ui::step(3, 5, "Default profile");
+        ui::step(3, total, "Default profile");
         let cfg = env.load()?;
         if cfg.profiles.len() > 1 {
             say("In a folder with no profile yet, `claude` asks which to use; the default comes first.");
@@ -220,7 +222,7 @@ pub fn setup(env: &Env, name: Option<String>, no_shell: bool, mode: Mode) -> Res
         }
 
         // 4. Folders.
-        ui::step(4, 5, "Folders");
+        ui::step(4, total, "Folders");
         say("Map folders to profiles; everything inside a folder inherits it. Leave empty to skip.");
         loop {
             let cfg = env.load()?;
@@ -248,12 +250,16 @@ pub fn setup(env: &Env, name: Option<String>, no_shell: bool, mode: Mode) -> Res
             })?;
             ui::done(&format!("{} -> {p}", env.tilde(&dir)));
         }
-        ui::step(5, 5, "Shell integration");
+        if total == 5 {
+            ui::step(5, 5, "Shell integration");
+        }
     }
 
     // 5. Shell integration.
-    let mut reopen = false;
-    if !no_shell {
+    let mut reopen = shell_ready;
+    if no_shell {
+        todo.push("Route `claude` through claude-account: claude-account shell install".into());
+    } else if !shell_ready {
         let sh = match Shell::detect() {
             Some(sh) => Some(sh),
             None if prompt => pick_shell()?,
@@ -290,7 +296,7 @@ pub fn setup(env: &Env, name: Option<String>, no_shell: bool, mode: Mode) -> Res
         steps.push("Open a new terminal, so `claude` goes through claude-account".to_string());
     }
     steps.extend(todo);
-    steps.push("Run claude in any project: it uses that folder's profile, or asks once".into());
+    steps.push("Run claude in any project: it uses that folder's account, or asks once".into());
     steps.push("Switch a project later with: claude-account   (check everything: claude-account doctor)".into());
     next_steps(&steps);
     Ok(ExitCode::SUCCESS)
@@ -405,7 +411,9 @@ pub fn uninstall(env: &Env, purge: bool, mode: Mode) -> Result<ExitCode> {
     // login would orphan its Keychain entry, so one failure stops the purge.
     if purge {
         for (name, dir) in &managed {
-            profiles::ensure_logged_out(env, name, dir).map_err(|e| format!("uninstall stopped: {e}"))?;
+            if profiles::ensure_logged_out(env, name, dir).map_err(|e| format!("uninstall stopped: {e}"))? {
+                println!("Logged out {name}");
+            }
         }
     }
     for (file, _) in shell::uninstall(env)? {
@@ -416,6 +424,21 @@ pub fn uninstall(env: &Env, purge: bool, mode: Mode) -> Result<ExitCode> {
             std::fs::remove_dir_all(&env.data_dir)
                 .map_err(|e| format!("cannot delete {}: {e}", env.tilde(&env.data_dir)))?;
             println!("Deleted {}", env.tilde(&env.data_dir));
+        }
+        // Folders it created in the base dir, only while still empty.
+        let emptied: Vec<String> =
+            cfg.created_in_base.iter().filter(|d| std::fs::remove_dir(env.base_dir.join(d)).is_ok()).cloned().collect();
+        if !emptied.is_empty() {
+            println!(
+                "Removed the empty folders it had created in {}: {}",
+                env.tilde(&env.base_dir),
+                emptied.join(", ")
+            );
+        }
+        let cache = crate::update::cache_dir(env);
+        if cache.exists() {
+            std::fs::remove_dir_all(&cache).map_err(|e| format!("cannot delete {}: {e}", env.tilde(&cache)))?;
+            println!("Deleted {}", env.tilde(&cache));
         }
         // Only this tool's own files; their dir goes too if nothing else is in it.
         for f in [env.config_file.clone(), env.config_file.with_extension("lock")] {
@@ -457,7 +480,7 @@ pub fn uninstall(env: &Env, purge: bool, mode: Mode) -> Result<ExitCode> {
         );
     }
     eprintln!(
-        "{} is never touched. {} files in your projects are left in place.",
+        "{} keeps its content. {} files in your projects are left in place.",
         env.tilde(&env.base_dir),
         state::LOCAL_FILE
     );

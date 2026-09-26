@@ -116,10 +116,16 @@ pub fn login(env: &Env, config_dir: &Path, args: &[OsString]) -> Result<bool> {
     Ok(status.success())
 }
 
+/// `claude auth logout`, quietly: callers report the outcome in their own words.
 pub fn logout(env: &Env, config_dir: &Path) -> Result<bool> {
-    let status =
-        command_for(env, config_dir).args(["auth", "logout"]).stdin(Stdio::null()).status().map_err(spawn_error)?;
-    Ok(status.success())
+    let out = command_for(env, config_dir)
+        .args(["auth", "logout"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(spawn_error)?;
+    Ok(out.success())
 }
 
 /// Replace this process with claude. Only returns on failure.

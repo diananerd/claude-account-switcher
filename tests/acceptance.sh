@@ -871,7 +871,7 @@ if selected install; then
     )
     want "install: exits 0" "0" "$(cat "$SANDBOX/i1.rc")"
     want_has "install: reports the version" "Installed claude-account" "$(cat "$SANDBOX/i1.log")"
-    want_has "install: puts ~/.local/bin on PATH in the block" ".local/bin'" "$(cat "$SANDBOX/i.zshrc")"
+    want_has "install: puts ~/.local/bin on PATH in the block, through \$HOME" 'export PATH="$HOME/.local/bin:$PATH"' "$(cat "$SANDBOX/i.zshrc")"
     want "install: running twice leaves one block" "1" "$(cat "$SANDBOX/i.blocks")"
     want_has "install: the same version again is a reinstall" "reinstall claude-account" "$(cat "$SANDBOX/i2.log")"
     want_has "install: an older installed version is an upgrade" "upgrade claude-account 0.0.1 ->" "$(cat "$SANDBOX/iup.log")"
@@ -967,6 +967,26 @@ if selected install; then
     want "install: ...leaving only the binary" "claude-account " "$(cat "$SANDBOX/c2.ls")"
     want "install: ...and one shell block" "1" "$(cat "$SANDBOX/c2.blocks")"
     want_has "install: warns when another copy wins on PATH" "comes before ~/.local/bin on your PATH" "$(cat "$SANDBOX/c3.log")"
+    # A whole life, then --purge: nothing of it may remain but the XDG parents.
+    (
+      export HOME="$SANDBOX/life" CLAUDE_ACCOUNT_DOWNLOAD_URL="file://$REL" PATH="$SANDBOX/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      mkdir -p "$HOME/.claude" "$HOME/work"; echo you@example.com > "$HOME/.claude/.fake-login"
+      echo '{"oauthAccount":{"emailAddress":"you@example.com"}}' > "$HOME/.claude.json"; printf 'export MINE=1\n' > "$HOME/.zshrc"
+      (cd "$HOME" && find . | sort) > "$SANDBOX/life.before"; cp "$HOME/.claude.json" "$SANDBOX/life.cj"
+      sh "$REPO/install.sh" >/dev/null 2>&1
+      B="$HOME/.local/bin/claude-account"
+      "$B" setup --name personal >/dev/null 2>&1
+      "$B" new work --no-login >/dev/null 2>&1; "$B" login work </dev/null >/dev/null 2>&1; "$B" use work "$HOME/work" >/dev/null 2>&1
+      mkdir -p "$HOME/.cache/claude-account"; echo '{}' > "$HOME/.cache/claude-account/update.json"
+      "$B" uninstall --purge -y > "$SANDBOX/life.log" 2>&1
+      (cd "$HOME" && find . | sort) > "$SANDBOX/life.after"
+      cmp -s "$HOME/.zshrc" <(printf 'export MINE=1\n') && echo same > "$SANDBOX/life.rc"
+    )
+    extra=$(comm -13 "$SANDBOX/life.before" "$SANDBOX/life.after" | grep -v -x -E '\./\.(config|cache|local|local/bin|local/share)' | tr '\n' ' ')
+    want "install: a full life then uninstall --purge leaves nothing behind" "" "$extra"
+    want "install: ...the rc file byte for byte" "same" "$(cat "$SANDBOX/life.rc" 2>/dev/null)"
+    want_has "install: ...and says it logged the account out" "Logged out work" "$(cat "$SANDBOX/life.log")"
+    want_not "install: ...without claude's own logout chatter" $'\nLogged out\n' "$(printf '\n%s\n' "$(cat "$SANDBOX/life.log")")"
     if command -v expect >/dev/null; then
       (
         unset CI
@@ -977,6 +997,8 @@ if selected install; then
         pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- ENTER n ENTER > "$SANDBOX/ii1.log"
         pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- ENTER > "$SANDBOX/ii2.log"
         pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- 2 ENTER '~/bin2' ENTER n ENTER 1 ENTER n ENTER > "$SANDBOX/ii3.log"
+        rm -rf "$HOME/.config/claude-account" "$HOME/.local/bin/claude-account"; printf 'export MINE=1\n' > "$HOME/.zshrc"
+        pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh" -- ENTER ENTER s o l o ENTER n n ENTER > "$SANDBOX/ii5.log"
         [ -x "$HOME/bin2/claude-account" ] && echo yes > "$SANDBOX/ii3.bin" || echo no > "$SANDBOX/ii3.bin"
         pty_in "$HOME" sh -c "cat '$REPO/install.sh' | sh -s -- --uninstall" -- y ENTER > "$SANDBOX/ii4.log"
         [ -e "$HOME/.local/bin/claude-account" ] && echo yes > "$SANDBOX/ii4.bin" || echo no > "$SANDBOX/ii4.bin"
@@ -996,6 +1018,11 @@ if selected install; then
       out=$(cat "$SANDBOX/ii3.log")
       want "install (interactive): Customize changes the folder" "yes" "$(cat "$SANDBOX/ii3.bin")"
       want_has "install (interactive): ...and without the rc file, says what to add" "eval" "$out"
+      out=$(sed 's/\x1b\[[0-9;]*m//g' "$SANDBOX/ii5.log")
+      want "install (interactive): with setup, one Next steps block" "1" "$(printf '%s\n' "$out" | grep -c '^Next steps')"
+      want_has "install (interactive): ...that starts with a new terminal" "1. Open a new terminal" "$out"
+      want_not "install (interactive): ...and no empty shell step" "[5/5]" "$out"
+      want_has "install (interactive): the steps count only what setup does" "[4/4] Folders" "$out"
       want_has "install (interactive): uninstall asks through the binary" "Continue?" "$(cat "$SANDBOX/ii4.log")"
       want "install (interactive): ...and removes it on yes" "no" "$(cat "$SANDBOX/ii4.bin")"
     else skip "install (interactive)" "expect not installed"; fi

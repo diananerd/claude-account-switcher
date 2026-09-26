@@ -457,9 +457,26 @@ install() {
   if [ "$INTERACTIVE" = 1 ] && [ "$has_profiles" = 0 ] && have claude; then
     say ""
     if ask "Set up your accounts now (claude-account setup)?" Y; then
-      "$BIN_DIR/$BIN_NAME" setup --no-shell </dev/tty || warn "setup did not finish; run it again with: claude-account setup"
-      ran_setup=1
+      # setup prints the single "Next steps"; tell it what happened to the shell.
+      # (just added -> open a new terminal first; skipped by choice -> say how to add it;
+      # already there -> setup sees it itself).
+      set --
+      if [ "$rc_changed" = 1 ]; then set -- --shell-ready; elif [ "$MODIFY_RC" = 0 ]; then set -- --no-shell; fi
+      if "$BIN_DIR/$BIN_NAME" setup "$@" </dev/tty; then
+        ran_setup=1
+      else
+        warn "setup did not finish; run it again with: claude-account setup"
+      fi
     fi
+  fi
+
+  if [ "$ran_setup" = 1 ]; then
+    if [ "$MODIFY_RC" = 0 ] && ! on_path "$BIN_DIR"; then
+      warn "$(tilde "$BIN_DIR") is not on your PATH; add it so the claude-account command is found."
+    fi
+    say ""
+    info "Help: claude-account --help · Docs: $DOCS"
+    return
   fi
 
   say ""
@@ -476,10 +493,8 @@ install() {
   fi
   if [ "$has_profiles" = 1 ]; then
     say "  $n. Your profiles and mappings are unchanged. Check everything: ${C}claude-account doctor${N}"
-  elif [ "$ran_setup" = 0 ]; then
-    say "  $n. Run ${C}claude-account setup${N} to name your accounts, log them in and map folders"; n=$((n + 1))
-    say "  $n. Run ${C}claude${N} in any project: it uses that folder's account, or asks once"
   else
+    say "  $n. Run ${C}claude-account setup${N} to name your accounts, log them in and map folders"; n=$((n + 1))
     say "  $n. Run ${C}claude${N} in any project: it uses that folder's account, or asks once"
   fi
   say ""

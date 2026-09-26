@@ -48,11 +48,15 @@ pub struct Config {
     /// Canonical directory -> profile.
     #[serde(default)]
     pub map: BTreeMap<PathBuf, String>,
+    /// Folders this tool created inside the base dir so accounts can share them;
+    /// `uninstall --purge` removes those that are still empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub created_in_base: Vec<String>,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Config { version: 1, default: None, profiles: BTreeMap::new(), map: BTreeMap::new() }
+        Config { version: 1, default: None, profiles: BTreeMap::new(), map: BTreeMap::new(), created_in_base: vec![] }
     }
 }
 

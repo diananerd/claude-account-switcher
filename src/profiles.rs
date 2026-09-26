@@ -290,8 +290,23 @@ fn create_account_dir(env: &Env, name: &str) -> Result<PathBuf> {
 /// Link the shared entries of the base dir into an account dir. Returns what it
 /// could not fix (an entry that exists but is not a link).
 pub fn link_shared(env: &Env, acct: &Path) -> Result<Vec<PathBuf>> {
+    let mut created = vec![];
     for d in SHARED_DIRS {
-        std::fs::create_dir_all(env.base_dir.join(d)).map_err(|e| format!("cannot create {d}: {e}"))?;
+        let p = env.base_dir.join(d);
+        if !p.exists() {
+            std::fs::create_dir_all(&p).map_err(|e| format!("cannot create {d}: {e}"))?;
+            created.push(d.to_string());
+        }
+    }
+    if !created.is_empty() {
+        env.update(|c| {
+            for d in created {
+                if !c.created_in_base.contains(&d) {
+                    c.created_in_base.push(d);
+                }
+            }
+            Ok(())
+        })?;
     }
     let mut conflicts = vec![];
     for e in SHARED_DIRS.iter().chain(SHARED_FILES) {
@@ -547,8 +562,11 @@ pub fn remove(env: &Env, profile: Option<String>, force: bool, purge: bool, mode
     }
     // Deleting the dir of a live login would orphan its Keychain entry: log out
     // first, and keep everything if that does not work.
-    if purge && let Some(d) = &deletable {
-        ensure_logged_out(env, profile, d)?;
+    if purge
+        && let Some(d) = &deletable
+        && ensure_logged_out(env, profile, d)?
+    {
+        ui::done(&format!("Logged out {profile}"));
     }
     env.update(|c| {
         c.map.retain(|_, p| p != profile);
@@ -573,7 +591,7 @@ pub fn remove(env: &Env, profile: Option<String>, force: bool, purge: bool, mode
 }
 
 /// Log a config dir out, or explain why nothing was deleted.
-pub fn ensure_logged_out(env: &Env, name: &str, dir: &Path) -> Result<()> {
+pub fn ensure_logged_out(env: &Env, name: &str, dir: &Path) -> Result<bool> {
     let keep = format!("nothing was deleted; log {name} out (claude-account logout {name}) and retry");
     let status = claude::auth_status(env, dir).map_err(|e| format!("cannot check {name}'s login ({e}); {keep}"))?;
     if status.logged_in {
@@ -581,8 +599,9 @@ pub fn ensure_logged_out(env: &Env, name: &str, dir: &Path) -> Result<()> {
         if !ok || claude::auth_status(env, dir).map(|a| a.logged_in).unwrap_or(true) {
             return Err(format!("could not log {name} out; {keep}"));
         }
+        return Ok(true);
     }
-    Ok(())
+    Ok(false)
 }
 
 pub struct LinkState {
