@@ -1,6 +1,7 @@
 ---
 layout: home
-hero:
+# The first screen is theme/HomeHero.vue, fed from here.
+intro:
   name: Claude Account Switcher
   tagline: Several Claude Code accounts on one machine. Every login stays live, and each folder decides which one <code>claude</code> uses.
   actions:

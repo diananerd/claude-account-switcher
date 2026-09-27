@@ -113,6 +113,11 @@ npm run dev       # local preview
 npm run deploy    # build and deploy; needs CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
 ```
 
+The home page demos are asciicast files in `docs/public/demos/`, recorded by
+`scripts/record-demos.py` from the real binary in a throwaway HOME (Claude Code
+is a stand-in; the install scene uses the public installer, so it needs the
+network and a published release). Rerun it when output shown there changes.
+
 The token needs Workers Scripts: Edit on the account and Workers Routes: Edit on
 the zone. `guide.md` includes `README.md`; `reference.md` is the reference; the
 site gets `llms.txt` at build time. Redeploy after changing them.

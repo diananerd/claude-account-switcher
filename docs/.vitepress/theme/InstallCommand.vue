@@ -25,8 +25,9 @@ async function copy() {
   <div class="install">
     <div class="line">
       <code><span class="prompt" aria-hidden="true">$</span><span ref="code">{{ command }}</span></code>
-      <button type="button" :aria-label="copied ? 'Copied' : 'Copy the install command'" @click="copy">
-        {{ copied ? "Copied" : "Copy" }}
+      <button type="button" :aria-label="copied ? 'Copied' : 'Copy the install command'" :title="copied ? 'Copied' : 'Copy'" @click="copy">
+        <svg v-if="copied" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.2 11.6 2.9 8.3l1.1-1.1 2.2 2.2 5.8-5.8 1.1 1.1z" /></svg>
+        <svg v-else viewBox="0 0 16 16" aria-hidden="true"><path d="M5 1.5h7A1.5 1.5 0 0 1 13.5 3v9h-1.5V3H5zM3.5 4.5h6A1.5 1.5 0 0 1 11 6v7.5A1.5 1.5 0 0 1 9.5 15h-6A1.5 1.5 0 0 1 2 13.5V6a1.5 1.5 0 0 1 1.5-1.5m0 1.5v7.5h6V6z" /></svg>
       </button>
     </div>
     <p class="note">Shows what it will change and asks first. macOS and Linux; tested on macOS.</p>
@@ -53,9 +54,13 @@ code {
   min-width: 0;
   overflow-x: auto;
   white-space: nowrap;
+  scrollbar-width: none;
   font-family: var(--vp-font-family-mono);
-  font-size: 14px;
+  font-size: 13.5px;
   color: var(--vp-c-text-1);
+}
+code::-webkit-scrollbar {
+  display: none;
 }
 .prompt {
   margin-right: 10px;
@@ -64,12 +69,20 @@ code {
 }
 button {
   flex: none;
-  padding: 6px 12px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
   color: var(--vp-button-brand-text);
   background: var(--vp-button-brand-bg);
+}
+button svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
 }
 button:hover {
   background: var(--vp-button-brand-hover-bg);

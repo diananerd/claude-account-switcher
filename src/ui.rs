@@ -46,22 +46,28 @@ fn rename_commands(msg: &str, name: &str) -> String {
     if name == "claude-switcher" {
         return msg.to_string();
     }
-    let needle = "claude-switcher ";
+    let needle = "claude-switcher";
     let mut out = String::with_capacity(msg.len());
     let mut rest = msg;
     while let Some(i) = rest.find(needle) {
         let before = rest[..i].chars().last();
-        let after = rest[i + needle.len()..].chars().next();
+        let tail = &rest[i + needle.len()..];
+        let mut next = tail.chars();
+        let (after, then) = (next.next(), next.next());
         let standalone = before.is_none_or(|c| c.is_whitespace() || "`(\"'".contains(c));
-        let is_command = after.is_some_and(|c| c.is_ascii_lowercase() || c == '-');
+        // A command is followed by a subcommand or flag, or stands alone (end of the
+        // message, a closing quote, or spaced out before a note); never a version or path.
+        // Alone, it is a command only where one is offered ("with: claude-switcher");
+        // in a sentence it is the tool's name.
+        let offered = rest[..i].ends_with(": ") || before == Some('`');
+        let is_command = match (after, then) {
+            (Some(' '), Some(c)) if c.is_ascii_lowercase() || c == '-' => true,
+            (None, _) | (Some(' '), None | Some(' ' | '(')) => offered,
+            (Some(c), _) => offered && "`'\")".contains(c),
+        };
         out.push_str(&rest[..i]);
-        if standalone && is_command {
-            out.push_str(name);
-            out.push(' ');
-        } else {
-            out.push_str(needle);
-        }
-        rest = &rest[i + needle.len()..];
+        out.push_str(if standalone && is_command { name } else { needle });
+        rest = tail;
     }
     out.push_str(rest);
     out
@@ -199,6 +205,20 @@ mod tests {
         assert_eq!(
             rename_commands("cargo uninstall claude-account-switcher", "csw"),
             "cargo uninstall claude-account-switcher"
+        );
+        assert_eq!(
+            rename_commands("Switch it later with: claude-switcher   (check: claude-switcher doctor)", "csw"),
+            "Switch it later with: csw   (check: csw doctor)"
+        );
+        assert_eq!(rename_commands("Change it with: claude-switcher", "csw"), "Change it with: csw");
+        assert_eq!(rename_commands("run `claude-switcher` again", "csw"), "run `csw` again");
+        assert_eq!(
+            rename_commands("so `claude` goes through claude-switcher", "csw"),
+            "so `claude` goes through claude-switcher"
+        );
+        assert_eq!(
+            rename_commands("Route `claude` through claude-switcher?", "csw"),
+            "Route `claude` through claude-switcher?"
         );
         assert_eq!(
             rename_commands("run: claude-switcher add work", "claude-switcher"),

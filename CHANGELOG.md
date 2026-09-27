@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] - 2026-09-26
+
+### Added
+
+- Docs site: the home page opens with terminal demos (use, switch, set up,
+  install) recorded from the real binary by `scripts/record-demos.py`.
+
+### Fixed
+
+- Suggested commands use the name you ran, also when the command stands alone:
+  after `csw setup`, "Switch a project later with: csw", not the full name.
+
 ## [0.1.2] - 2026-09-26
 
 ### Added
