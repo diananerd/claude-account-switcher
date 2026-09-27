@@ -1,5 +1,5 @@
 {
-  "description": "Tell Claude when this session runs under a different claude-switcher profile than its directory resolves to.",
+  "description": "Tell Claude which claude-switcher profile this session runs as, and when its directory resolves to another.",
   "hooks": {
     "SessionStart": [
       {

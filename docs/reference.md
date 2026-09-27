@@ -39,7 +39,7 @@ Global flags: `--no-input`, `-y/--yes` (answer yes to confirmations), `--json`
 | `shell status` | Where the block is installed. | yes |
 | `completions <shell>` | Shell completions (bash, zsh, fish, elvish, powershell). | |
 | `statusline` | Status line segment; reads Claude Code's status line JSON on stdin. | |
-| `hook session-start` | SessionStart hook: prints a note for Claude when the session's profile differs from its folder's. | |
+| `hook session-start` | SessionStart hook: tells Claude which profile (and account email) the session runs as, and when its folder resolves to another profile. Silent for a session that is not a profile. | |
 | `update [--version TAG]` | Runs the official installer into this binary's folder: latest stable release, or TAG. Interactive in a terminal, `-y` otherwise. A copy owned by Homebrew or cargo (or a development build) gets that tool's command instead. | |
 | `uninstall [--purge]` | Shows the plan and confirms (default no; `-y` headless). Removes the shell integration and the binary. `--purge`: also log out and delete the profiles it created and its config file (other files next to it stay); stops before changing anything if a logout fails. | |
 
@@ -100,6 +100,7 @@ remembered.
 ```toml
 version = 1
 default = "personal"
+created_in_base = ["agents", "commands", "hooks", "plugins"]
 
 [profiles.personal]
 config_dir = "/Users/you/.claude"
@@ -117,7 +118,9 @@ same_as = "personal"
 ```
 
 Each profile has exactly one of `config_dir` or `same_as`. Map keys are canonical
-paths. Writes are atomic and locked, so concurrent launches do not lose changes.
+paths. `created_in_base` lists the folders the tool created in `~/.claude` for
+accounts to share; `uninstall --purge` removes those that are still empty.
+Writes are atomic and locked, so concurrent launches do not lose changes.
 
 A new account's config dir links these from `~/.claude`: the user-level
 configuration Claude Code documents (`settings.json`, `CLAUDE.md`,

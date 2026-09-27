@@ -7,8 +7,9 @@ Key facts for an assistant helping a user:
 - A profile is a name for a Claude Code config dir with its own login, or an alias of another profile's login (`same_as`). The profile using `~/.claude` runs with CLAUDE_CONFIG_DIR unset.
 - `claude` (a shell function installed by the tool) resolves the profile of the current directory: nearest mapped ancestor wins; symlinks, letter case and git worktrees resolve to the same answer. Unmapped: a picker asks once and remembers it at the repository root.
 - A running session cannot change account. Change the mapping (`claude-switcher use <profile>`), then exit and run `claude --continue`.
-- Login is interactive (browser OAuth): the user runs `claude-switcher login <profile>` in their own terminal (an unknown name creates the profile first), or `/login` inside a session of that profile. Never run login for them.
+- Login is interactive (browser OAuth): a new account is `claude-switcher add <name>` (logs it in; `--sso` for SSO), an expired login is `claude-switcher login <profile>`; the user runs either in their own terminal, or `/login` inside a session of that profile. Never run login for them.
 - Read state with `claude-switcher status --json` and `claude-switcher list --json`. Diagnose with `claude-switcher doctor` (also reports a newer release). Update with `claude-switcher update` (latest stable).
+- With the optional Claude Code plugin, a note at session start says which profile the session runs as and whether the folder maps to another; `/claude-switcher:switch` shows or changes the mapping.
 - Config: `~/.config/claude-switcher/config.toml` (profiles, default, map). New accounts: `~/.local/share/claude-switcher/profiles/<name>`. Per-folder pin: a `.claude-switcher` file holding a profile name.
 
 ## Docs

@@ -284,6 +284,9 @@ if selected env; then
   want "env: a deleted cwd falls back to the default" "personal" \
     "$(cd "$HOME/gone" && rmdir "$HOME/gone" && "$CA" launch -p x 2>/dev/null | sed -n 's/.* ACCT=\([^ ]*\) .*/\1/p')"
   fails "env: default rejects unknown profiles" "$CA" default nobody
+  "$CA" run </dev/null >/dev/null 2>&1; rc=$?
+  want "env: run without a profile or a terminal is a usage error" "2" "$rc"
+  want "env: default without arguments prints the default" "personal" "$("$CA" default </dev/null 2>/dev/null)"
   fails "env: run with an unknown profile fails loudly" "$CA" run nobody -p x
   want "env: resolve --json" '{"matched":"'"$(canon "$W")"'","profile":"work"}' \
     "$("$CA" resolve --json "$W/sub" | jq -S -c .)"
@@ -693,8 +696,15 @@ if selected integration; then
   want "integration: statusline infers the profile without CLAUDE_SWITCHER_PROFILE" "client" \
     "$(echo "{\"cwd\":\"$W/client-proj\"}" | CLAUDE_CONFIG_DIR="$CLIENT_DIR" "$CA" statusline)"
   want "integration: an alias is inferred from the map" "personal" "$(echo "{\"cwd\":\"$HOME/personal\"}" | "$CA" statusline)"
-  want "integration: hook is silent when session and map agree" "" \
-    "$(echo "{\"cwd\":\"$W\"}" | CLAUDE_SWITCHER_PROFILE=work "$CA" hook session-start)"
+  out=$(echo "{\"cwd\":\"$W\"}" | CLAUDE_SWITCHER_PROFILE=work "$CA" hook session-start)
+  want_has "integration: hook names the session's account when session and map agree" \
+    'runs as profile "work" (work@example.com), the profile' "$out"
+  want_has "integration: ...and points to the skill" "/claude-switcher:switch changes it" "$out"
+  mkdir -p "$SANDBOX/unmapped-hook"
+  want_has "integration: hook says when the folder has no profile" "no profile is mapped to" \
+    "$(echo "{\"cwd\":\"$SANDBOX/unmapped-hook\"}" | CLAUDE_SWITCHER_PROFILE=work "$CA" hook session-start)"
+  want "integration: hook is silent for a session that is not a profile" "" \
+    "$(echo "{\"cwd\":\"$W\"}" | CLAUDE_CONFIG_DIR="$SANDBOX/foreign-cfg" "$CA" hook session-start)"
   want_has "integration: hook tells Claude about a mismatch" 'runs as profile "work"' \
     "$(echo "{\"cwd\":\"$W/client-proj\"}" | CLAUDE_SWITCHER_PROFILE=work "$CA" hook session-start)"
   mkdir -p "$W/sess-a" "$HOME/sess-b"
@@ -1079,6 +1089,60 @@ if selected install; then
       want "install (interactive): ...and removes it on yes" "no" "$(cat "$SANDBOX/ii4.bin")"
     else skip "install (interactive)" "expect not installed"; fi
   fi
+fi
+
+# The examples in the docs are output, so they are checked against real output:
+# the README's scenario is rebuilt in its own HOME and each block compared.
+if selected docs; then
+  section "docs examples match real output"
+  # First fenced block after the first line matching <pattern> in <file>.
+  doc_block() { awk -v pat="$2" 'f == 0 && index($0, pat) { f = 1; next } f == 1 && /^```/ { f = 2; next } f == 2 && /^```/ { exit } f == 2' "$REPO/$1"; }
+  plain() { sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' | tr -d '\r' | sed 's/[[:space:]]*$//'; }
+  OUTER_HOME=$HOME
+  export HOME="$SANDBOX/docs-home"
+  {
+    # A ~/.claude that already has some shared folders, as in the example.
+    mkdir -p "$HOME/.claude"/{skills,output-styles,projects,plans,file-history} "$HOME/work/side-project" "$HOME/personal" "$HOME/other/new-idea"
+    echo you@example.com > "$HOME/.claude/.fake-login"
+    echo '{"oauthAccount":{"emailAddress":"you@example.com"}}' > "$HOME/.claude.json"
+    "$CA" add personal --base >/dev/null 2>&1
+    "$CA" add work --no-login >/dev/null 2>&1
+    FAKE_LOGIN_EMAIL=you@company.com "$CA" login work </dev/null >/dev/null 2>&1
+    "$CA" default personal >/dev/null 2>&1
+    "$CA" use work "$HOME/work" >/dev/null 2>&1
+    "$CA" use personal "$HOME/work/side-project" >/dev/null 2>&1
+    "$CA" use personal "$HOME/personal" >/dev/null 2>&1
+
+    # README: which folder gets which account.
+    while read -r dir _ want _; do
+      if [ "$want" = asks ]; then want=""; fi
+      want "docs: README maps ${dir} to ${want:-nothing}" "$want" "$("$CA" resolve "${dir/#\~/$HOME}")"
+    done < <(doc_block README.md "It uses the account of the folder you are in")
+
+    # README: the picker in a folder with no account yet.
+    if command -v expect >/dev/null; then
+      got=$(pty_in "$HOME/other/new-idea" "$CA" launch -- ESC | plain | head -4)
+      want "docs: README picker is the real picker" "$(doc_block README.md "it asks once and remembers the answer" | plain)" "$got"
+    else skip "docs: README picker" "expect not installed"; fi
+
+    # README: the status line segment, "work" or "work (here: personal)".
+    comment=$(doc_block README.md "add this to your" | sed -n 's/.*# //p')
+    one=$(echo "{\"cwd\":\"$HOME/work\"}" | CLAUDE_SWITCHER_PROFILE=work "$CA" statusline)
+    two=$(echo "{\"cwd\":\"$HOME/personal\"}" | CLAUDE_SWITCHER_PROFILE=work "$CA" statusline)
+    want "docs: README status line comment is the real output" "\"$one\" or \"$two\"" "$comment"
+
+    # Reference: config.toml, compared as data (the file may order keys differently).
+    "$CA" add writing --same-as personal >/dev/null 2>&1
+    home_real=$(cd -P "$HOME" && pwd -P)
+    doc_block docs/reference.md '`config.toml`:' | sed "s|/Users/you|$home_real|g" > "$SANDBOX/doc-config.toml"
+    want "docs: reference config.toml is what the tool writes" "same" "$(python3 - "$SANDBOX/doc-config.toml" "$HOME/.config/claude-switcher/config.toml" <<'EOF'
+import sys, tomllib
+a, b = (tomllib.load(open(p, "rb")) for p in sys.argv[1:3])
+print("same" if a == b else f"doc={a}\nreal={b}")
+EOF
+)"
+  }
+  export HOME=$OUTER_HOME
 fi
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"

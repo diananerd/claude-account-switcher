@@ -158,16 +158,30 @@ pub fn hook_session_start(env: &Env) -> Result<ExitCode> {
     let Some(dir) = stdin_dir(&["/cwd"]).or_else(paths::logical_cwd) else {
         return Ok(ExitCode::SUCCESS);
     };
-    if let (Some(cur), Some(hit)) = (session_profile(env, &cfg, &dir), cfg.lookup(&dir))
-        && cur != hit.profile
-    {
-        println!(
-            "claude-switcher: this session runs as profile \"{cur}\", but {} resolves to \"{}\". \
+    let Some(cur) = session_profile(env, &cfg, &dir) else { return Ok(ExitCode::SUCCESS) };
+    // Always say which account this is, so Claude answers "which account?" without digging.
+    let who = cfg
+        .config_dir(&cur)
+        .ok()
+        .and_then(|d| claude::cached_email(env, &d))
+        .map(|e| format!(" ({e})"))
+        .unwrap_or_default();
+    let here = dir.display();
+    match cfg.lookup(&dir) {
+        Some(hit) if hit.profile != cur => println!(
+            "claude-switcher: this session runs as profile \"{cur}\"{who}, but {here} resolves to \"{}\". \
              Mention it to the user once: to switch, they exit and run `claude --continue` \
              from a shell with the claude-switcher integration.",
-            dir.display(),
             hit.profile
-        );
+        ),
+        Some(_) => println!(
+            "claude-switcher: this session runs as profile \"{cur}\"{who}, the profile {here} resolves to. \
+             Use this when asked which Claude account or profile is in use; /claude-switcher:switch changes it."
+        ),
+        None => println!(
+            "claude-switcher: this session runs as profile \"{cur}\"{who}; no profile is mapped to {here} yet. \
+             Use this when asked which Claude account or profile is in use; /claude-switcher:switch maps one."
+        ),
     }
     Ok(ExitCode::SUCCESS)
 }

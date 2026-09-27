@@ -19,7 +19,7 @@ Claude Code plugin. Unix-like only.
 | `src/paths.rs` | Canonical and logical paths, git main worktree |
 | `src/launch.rs` | `launch`/`run` (exec claude), picker on first launch, status line, hook |
 | `src/mapping.rs` | `use`, `forget`, `status`, `resolve`, `map`, `prune` |
-| `src/profiles.rs` | `new`, `login`, `logout`, `rename`, `remove`, `list`, `default`, shared links |
+| `src/profiles.rs` | `add`, `login`, `logout`, `rename`, `remove`, `list`, `default`, shared links |
 | `src/setup.rs` | `setup` wizard, bare-command switcher, `shell`, `uninstall` |
 | `src/doctor.rs` | `doctor` |
 | `src/shell.rs` | Shell function and marked rc blocks |
@@ -61,15 +61,18 @@ Claude Code plugin. Unix-like only.
 
 ```sh
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
-tests/acceptance.sh              # builds release, runs everything (~1 min)
+tests/acceptance.sh              # builds release, runs everything (~2 min)
 tests/acceptance.sh <section>    # profiles inherit local symlink worktree env forget
-                                 # lifecycle doctor shell integration picker setup install
+                                 # lifecycle doctor shell review release update matrix
+                                 # integration picker setup install docs
 ```
 
 The acceptance suite uses a throwaway `HOME` and a fake `claude` (prints its
 environment; implements `auth status|login|logout`). Interactive flows run in a
 real pty through `expect`. Every behaviour change needs a case there; a bug fix
-needs the case that failed before the fix.
+needs the case that failed before the fix. The `docs` section rebuilds the
+README scenario and compares the output examples in the docs with real output:
+change an example and the output together.
 
 ## CI
 

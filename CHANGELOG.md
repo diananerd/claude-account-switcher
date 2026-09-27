@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-09-26
+
+### Added
+
+- Tests: the docs' output examples (folder mapping, picker, status line,
+  `config.toml`) are compared with real output.
+
+### Changed
+
+- The plugin's SessionStart hook now always tells Claude which profile (and
+  account email) the session runs as, not only when the folder maps to another
+  one, so "which account am I using?" gets a direct answer.
+
+### Fixed
+
+- Docs: `llms.txt` names `add` for new accounts and describes the plugin;
+  `AGENTS.md` names `add` and lists every test section; the reference documents
+  `created_in_base` in `config.toml`.
+
 ## [0.1.1] - 2026-09-26
 
 ### Fixed
