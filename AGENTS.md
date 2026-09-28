@@ -120,7 +120,8 @@ network and a published release). Rerun it when output shown there changes.
 
 The token needs Workers Scripts: Edit on the account and Workers Routes: Edit on
 the zone. `guide.md` includes `README.md`; `reference.md` is the reference; the
-site gets `llms.txt` at build time. Redeploy after changing them.
+site gets `llms.txt` and `llms-full.txt` (the summary plus every doc page) at
+build time, from `scripts/llms-files.sh`. Redeploy after changing them.
 
 A bad release: do not move or reuse its tag. Delete the GitHub release (the tag
 can stay), fix, and publish the next patch version; `latest` then points to it.

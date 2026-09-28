@@ -61,6 +61,7 @@ export default defineConfig({
           { text: "How it works", link: "/how-it-works" },
           { text: "Comparison", link: "/comparison" },
           { text: "For LLMs (llms.txt)", link: "/llms.txt", target: "_self" },
+          { text: "All docs (llms-full.txt)", link: "/llms-full.txt", target: "_self" },
         ],
       },
     ],

@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "cp ../llms.txt public/llms.txt && vitepress dev .",
-    "build": "cp ../llms.txt public/llms.txt && vitepress build .",
+    "dev": "sh ../scripts/llms-files.sh && vitepress dev .",
+    "build": "sh ../scripts/llms-files.sh && vitepress build .",
     "preview": "vitepress preview .",
     "deploy": "npm run build && wrangler deploy -c ../deploy/wrangler.jsonc"
   },

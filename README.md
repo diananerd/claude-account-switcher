@@ -55,7 +55,7 @@ spot.
 | `csw` | switch this project's account (asks which) |
 | `csw use work` | use `work` for this project; add a folder to map that one instead |
 | `csw status` | which account applies here, and why |
-| `csw add client` | add an account and log it in (`--sso` for SSO) |
+| `csw add client` | add an account and log it in |
 | `csw list` | your accounts and their logins |
 | `csw login client` | log an account in again, e.g. when its login expired |
 | `csw remove client` | remove an account (keeps its login unless `--purge`) |

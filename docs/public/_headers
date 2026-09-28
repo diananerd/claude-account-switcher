@@ -1,0 +1,4 @@
+# Workers Static Assets headers. Plain-text files carry UTF-8 so browsers do not
+# read them as Latin-1 (llms-full.txt quotes the picker, which is not ASCII).
+/*.txt
+  Content-Type: text/plain; charset=utf-8

@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.4] - 2026-09-28
+
+### Added
+
+- Docs site: `llms-full.txt`, the `llms.txt` summary followed by every doc page
+  in one plain-text file, for assistants. Both are built from the docs, so they
+  cannot drift.
+
+### Fixed
+
+- Docs site: plain-text files (`llms.txt`, `llms-full.txt`) are served as UTF-8,
+  so browsers no longer garble the non-ASCII characters in them.
+- `add --help` and the command examples show only the login options that are
+  documented.
+
 ## [0.1.3] - 2026-09-26
 
 ### Added
@@ -39,9 +54,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- `add` accepts `--sso` and `--email`, as the docs and `--help` show, and
-  passes them to `claude auth login`. With either, it no longer asks what the
-  profile is: login options mean an account of its own.
+- `add` accepts `--email`, as the docs and `--help` show, and passes it to
+  `claude auth login`. With it, it no longer asks what the profile is: a login
+  option means an account of its own.
 - Docs: the picker example shows the "+ Add an account" row, and the build
   from source command is two commands again.
 

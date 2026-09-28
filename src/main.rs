@@ -42,7 +42,7 @@ use state::{Config, Env, Result};
         claude-switcher setup               guided first-time setup\n  \
         claude-switcher                     switch this project's profile\n  \
         claude-switcher use work ~/work     everything under ~/work uses the profile work\n  \
-        claude-switcher add work --sso      add an account and log it in\n  \
+        claude-switcher add work            add an account and log it in\n  \
         claude-switcher status --json       what applies here, for scripts\n\n\
         Docs: https://switcher.diananerd.com"
 )]
@@ -139,18 +139,19 @@ enum Cmd {
         /// Do not log it in now
         #[arg(long)]
         no_login: bool,
-        /// Log in with SSO (passed to `claude auth login`)
-        #[arg(long, conflicts_with_all = ["no_login", "same_as", "base", "dir"])]
+        // SSO login, passed to `claude auth login`. Hidden on purpose: it works but
+        // has not been validated with a real SSO account, so it is not documented.
+        #[arg(long, hide = true, conflicts_with_all = ["no_login", "same_as", "base", "dir"])]
         sso: bool,
         /// Account email to log in with (passed to `claude auth login`)
         #[arg(long, value_name = "EMAIL", conflicts_with_all = ["no_login", "same_as", "base", "dir"])]
         email: Option<String>,
     },
-    /// Log an account in again, e.g. when its login expired (extra args go to `claude auth login`, e.g. --sso)
+    /// Log an account in again, e.g. when its login expired (extra args go to `claude auth login`)
     Login {
         /// Profile to log in; a new name creates it (picked in a terminal when omitted)
         profile: Option<String>,
-        /// Passed to `claude auth login`, e.g. --sso or --email you@company.com
+        /// Passed to `claude auth login`, e.g. --email you@company.com
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<OsString>,
     },
@@ -391,7 +392,14 @@ fn dispatch(env: &Env, cli: Cli) -> Result<ExitCode> {
         Some(Cmd::Shell(ShellCmd::Uninstall)) => setup::shell_uninstall(env),
         Some(Cmd::Shell(ShellCmd::Status)) => setup::shell_status(env, json),
         Some(Cmd::Completions { shell }) => {
-            clap_complete::generate(shell, &mut Cli::command(), "claude-switcher", &mut std::io::stdout());
+            // clap_complete lists hidden options too; rebuild `add` without --sso so
+            // completions do not reveal it either.
+            let mut cmd = Cli::command().mut_subcommand("add", |add| {
+                let args: Vec<_> = add.get_arguments().filter(|a| a.get_id() != "sso").cloned().collect();
+                let about = add.get_about().cloned().unwrap_or_default();
+                clap::Command::new("add").about(about).args(args)
+            });
+            clap_complete::generate(shell, &mut cmd, "claude-switcher", &mut std::io::stdout());
             Ok(ExitCode::SUCCESS)
         }
         Some(Cmd::Statusline) => launch::statusline(env),

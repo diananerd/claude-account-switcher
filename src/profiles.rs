@@ -134,12 +134,12 @@ pub struct AddArgs {
     pub base: bool,
     pub dir: Option<PathBuf>,
     pub login: bool,
-    /// Passed to `claude auth login`, e.g. --sso.
+    /// Passed to `claude auth login`, e.g. --email.
     pub login_args: Vec<OsString>,
 }
 
 pub fn add(env: &Env, args: AddArgs, prompt: bool) -> Result<ExitCode> {
-    // Login options (--sso, --email) only make sense for an account of its own.
+    // Login options (--email) only make sense for an account of its own.
     let ask_kind = prompt && args.login_args.is_empty();
     let name = create_as(env, args.name, args.same_as, args.base, args.dir, prompt, ask_kind)?;
     let cfg = env.load()?;
@@ -151,7 +151,7 @@ pub fn add(env: &Env, args: AddArgs, prompt: bool) -> Result<ExitCode> {
             return login(env, Some(name), args.login_args, true);
         }
         if args.login_args.is_empty() {
-            ui::hint(&format!("log it in: claude-switcher login {name}   (add --sso for SSO accounts)"));
+            ui::hint(&format!("log it in: claude-switcher login {name}"));
         } else {
             let extra: Vec<String> = args.login_args.iter().map(|a| a.to_string_lossy().into_owned()).collect();
             ui::hint(&format!("log it in: claude-switcher login {name} {}", extra.join(" ")));
