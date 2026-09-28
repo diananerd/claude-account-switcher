@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-09-28
+
+### Added
+
+- Live switching: switching the account of the folder a session runs in
+  (`use`, or the plugin's skill) moves the running session too. When Claude's
+  reply ends the session restarts under the new account and resumes the same
+  conversation, with the options it was started with. Interactive sessions now
+  run as a child of `claude-switcher`; Ctrl-Z, signals and the exit status pass
+  through. `CLAUDE_SWITCHER_NO_SUPERVISE=1` turns it off.
+- `hook stop`, and a Stop hook in the plugin that calls it.
+
 ## [0.1.4] - 2026-09-28
 
 ### Added

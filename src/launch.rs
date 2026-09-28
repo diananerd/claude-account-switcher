@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use crate::state::{self, Config, Env, Result};
-use crate::{aborted, claude, cwd, paths, profiles, require, session_profile, ui};
+use crate::{aborted, claude, cwd, paths, profiles, require, session_profile, supervise, ui};
 
 /// Resolve the profile for the current directory, then exec claude with it.
 /// `once` names a profile for this launch only (`run`).
@@ -71,6 +71,9 @@ pub fn launch(env: &Env, args: Vec<OsString>, once: Option<String>) -> Result<Ex
     let cfg = env.load()?;
     require(&cfg, &name)?;
     let dir = cfg.config_dir(&name).map_err(|e| format!("{e}\nRun: claude-switcher doctor"))?;
+    if supervise::wanted(&args) {
+        return supervise::run(env, name, args);
+    }
     let mut cmd = claude::command_for(env, &dir);
     cmd.args(&args).env("CLAUDE_SWITCHER_PROFILE", &name);
     Err(claude::exec(cmd))
@@ -128,12 +131,17 @@ fn new_profile_here(env: &Env) -> Result<String> {
     Ok(name)
 }
 
-/// Directory named by the hook / status line JSON on stdin, else the cwd.
-fn stdin_dir(pointers: &[&str]) -> Option<PathBuf> {
+/// The hook / status line JSON on stdin, if any.
+fn stdin_json() -> Option<Value> {
     if std::io::stdin().is_terminal() {
         return None;
     }
-    let v: Value = serde_json::from_reader(std::io::stdin()).ok()?;
+    serde_json::from_reader(std::io::stdin()).ok()
+}
+
+/// Directory named by the hook / status line JSON on stdin, else the cwd.
+fn stdin_dir(pointers: &[&str]) -> Option<PathBuf> {
+    let v = stdin_json()?;
     pointers.iter().find_map(|p| v.pointer(p).and_then(Value::as_str)).map(PathBuf::from)
 }
 
@@ -168,6 +176,12 @@ pub fn hook_session_start(env: &Env) -> Result<ExitCode> {
         .unwrap_or_default();
     let here = dir.display();
     match cfg.lookup(&dir) {
+        Some(hit) if hit.profile != cur && supervise::obstacle(&cfg, &cur, &hit.profile).is_none() => println!(
+            "claude-switcher: this session runs as profile \"{cur}\"{who}, but {here} resolves to \"{}\". \
+             Mention it to the user once: `claude-switcher use {}` moves this session to it \
+             when your reply ends, keeping the conversation.",
+            hit.profile, hit.profile
+        ),
         Some(hit) if hit.profile != cur => println!(
             "claude-switcher: this session runs as profile \"{cur}\"{who}, but {here} resolves to \"{}\". \
              Mention it to the user once: to switch, they exit and run `claude --continue` \
@@ -182,6 +196,21 @@ pub fn hook_session_start(env: &Env) -> Result<ExitCode> {
             "claude-switcher: this session runs as profile \"{cur}\"{who}; no profile is mapped to {here} yet. \
              Use this when asked which Claude account or profile is in use; /claude-switcher:switch maps one."
         ),
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Stop hook: Claude's reply is over. Remember the session id for the
+/// supervisor, and when the session asked to move, tell the supervisor to move
+/// it now. Silent, and a no-op outside a supervised session.
+pub fn hook_stop(env: &Env) -> Result<ExitCode> {
+    let Some(pid) = supervise::supervisor() else { return Ok(ExitCode::SUCCESS) };
+    let files = supervise::Run::of(env, pid);
+    if let Some(id) = stdin_json().as_ref().and_then(|v| v.pointer("/session_id")).and_then(Value::as_str) {
+        files.record_session(id)?;
+    }
+    if files.switch_target().is_some() && files.session().is_some() {
+        supervise::nudge(pid);
     }
     Ok(ExitCode::SUCCESS)
 }

@@ -17,7 +17,8 @@ Claude Code plugin. Unix-like only.
 | `src/main.rs` | CLI definition (clap), dispatch, shared helpers |
 | `src/state.rs` | Model: `Env` (locations), `Config` (config.toml), profiles, **resolution** |
 | `src/paths.rs` | Canonical and logical paths, git main worktree |
-| `src/launch.rs` | `launch`/`run` (exec claude), picker on first launch, status line, hook |
+| `src/launch.rs` | `launch`/`run` (exec claude), picker on first launch, status line, hooks |
+| `src/supervise.rs` | Interactive sessions run as a child, so `use` can move them live |
 | `src/mapping.rs` | `use`, `forget`, `status`, `resolve`, `map`, `prune` |
 | `src/profiles.rs` | `add`, `login`, `logout`, `rename`, `remove`, `list`, `default`, shared links |
 | `src/setup.rs` | `setup` wizard, bare-command switcher, `shell`, `uninstall` |
@@ -54,7 +55,9 @@ Claude Code plugin. Unix-like only.
    `-y` accepts confirmations. Never hang. Flows end with numbered next steps.
    The installer follows the same rules (answers from `/dev/tty`).
 9. `launch` and `run <profile>` pass every following argument to claude verbatim,
-   bypassing clap.
+   bypassing clap. A live switch resumes with the same options, minus the prompt
+   and any choice of conversation, read against `claude --help`; when that
+   cannot be read it carries nothing over rather than guess.
 10. Code, comments and messages in English.
 
 ## Testing

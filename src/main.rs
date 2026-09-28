@@ -17,6 +17,7 @@ mod profiles;
 mod setup;
 mod shell;
 mod state;
+mod supervise;
 mod ui;
 mod update;
 
@@ -253,6 +254,7 @@ enum ShellCmd {
 #[derive(Clone, Copy, ValueEnum)]
 enum HookEvent {
     SessionStart,
+    Stop,
 }
 
 fn main() -> ExitCode {
@@ -404,6 +406,7 @@ fn dispatch(env: &Env, cli: Cli) -> Result<ExitCode> {
         }
         Some(Cmd::Statusline) => launch::statusline(env),
         Some(Cmd::Hook { event: HookEvent::SessionStart }) => launch::hook_session_start(env),
+        Some(Cmd::Hook { event: HookEvent::Stop }) => launch::hook_stop(env),
         Some(Cmd::Uninstall { purge }) => setup::uninstall(env, purge, mode),
         Some(Cmd::Update { version }) => update::update(env, version, mode),
         Some(Cmd::RefreshUpdateCache) => update::refresh(env),
@@ -493,16 +496,35 @@ pub fn session_profile(env: &Env, cfg: &Config, dir: &Path) -> Option<String> {
 
 /// Run from inside a Claude Code session: when the change just made means this
 /// session's own directory now resolves to another profile than the session
-/// runs as, say how to move the conversation over. Changes elsewhere say nothing.
+/// runs as, move the session there when the reply ends (a supervised session),
+/// or say how to move it by hand. Changes elsewhere say nothing.
 pub fn note_running_session(env: &Env) {
     if std::env::var_os("CLAUDECODE").is_none() {
         return;
     }
     let (Ok(cfg), Some(here)) = (env.load(), paths::logical_cwd()) else { return };
     let Some(now) = cfg.lookup(&here).map(|h| h.profile) else { return };
-    if let Some(cur) = session_profile(env, &cfg, &here)
-        && cur != now
-    {
-        ui::hint(&format!("this session still runs as {cur}; exit and run `claude --continue` to resume it as {now}"));
+    let Some(cur) = session_profile(env, &cfg, &here) else { return };
+    let run = supervise::supervisor().map(|pid| supervise::Run::of(env, pid));
+    if cur == now {
+        // Switched back before the reply ended: nothing to move any more.
+        if let Some(run) = run {
+            run.cancel_switch();
+        }
+        return;
+    }
+    match (run, supervise::obstacle(&cfg, &cur, &now)) {
+        (Some(run), None) => match run.request_switch(&now) {
+            Ok(()) => ui::hint(&format!(
+                "this session moves to {now} when Claude's reply ends: it restarts by itself and keeps the conversation"
+            )),
+            Err(e) => ui::hint(&format!(
+                "this session still runs as {cur} ({e}); exit and run `claude --continue` to resume it as {now}"
+            )),
+        },
+        (_, why) => ui::hint(&format!(
+            "this session still runs as {cur}{}; exit and run `claude --continue` to resume it as {now}",
+            why.map(|w| format!(" ({w})")).unwrap_or_default()
+        )),
     }
 }

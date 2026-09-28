@@ -40,6 +40,7 @@ Global flags: `--no-input`, `-y/--yes` (answer yes to confirmations), `--json`
 | `completions <shell>` | Shell completions (bash, zsh, fish, elvish, powershell). | |
 | `statusline` | Status line segment; reads Claude Code's status line JSON on stdin. | |
 | `hook session-start` | SessionStart hook: tells Claude which profile (and account email) the session runs as, and when its folder resolves to another profile. Silent for a session that is not a profile. | |
+| `hook stop` | Stop hook: records the session id for its supervisor and, when `use` asked the session to move, tells the supervisor to move it now. Silent; a no-op outside a supervised session. | |
 | `update [--version TAG]` | Runs the official installer into this binary's folder: latest stable release, or TAG. Interactive in a terminal, `-y` otherwise. A copy owned by Homebrew or cargo (or a development build) gets that tool's command instead. | |
 | `uninstall [--purge]` | Shows the plan and confirms (default no; `-y` headless). Removes the shell integration and the binary. `--purge`: also log out and delete the profiles it created and its config file (other files next to it stay); stops before changing anything if a logout fails. | |
 
@@ -92,6 +93,7 @@ remembered.
 |---|---|
 | `$XDG_CONFIG_HOME/claude-switcher/config.toml` (default `~/.config/...`) | Profiles, default, mappings. Mode 0600. |
 | `$XDG_DATA_HOME/claude-switcher/profiles/<name>` (default `~/.local/share/...`) | Config dirs created for new accounts. Mode 0700. |
+| `$XDG_DATA_HOME/claude-switcher/run/<pid>.session`, `<pid>.switch` | A supervised session's id and the profile it was asked to move to. Removed when the session ends. |
 | `<folder>/.claude-switcher` | Optional pin: first non-blank, non-`#` line is a profile name. |
 | rc files | A block between `# >>> claude-switcher >>>` and `# <<< claude-switcher <<<`, edited in place; removal restores the file byte for byte. A start marker without its end marker is never touched. An existing `alias claude=<path>` is replaced by the function, and `<path>` becomes the claude it runs. Fish: `conf.d/claude-switcher.fish`. |
 
@@ -140,6 +142,8 @@ Credentials are never read or copied.
 | `CLAUDE_CONFIG_DIR` | Set by `launch` for non-base profiles. If already set to a dir that is no profile's, `launch` leaves it alone. |
 | `CLAUDE_SWITCHER_CONFIG` | Use another config file. |
 | `CLAUDE_SWITCHER_BASE_DIR` | Dir whose settings new accounts share and that `--base` adopts (default `~/.claude`). Only `~/.claude` itself runs with `CLAUDE_CONFIG_DIR` unset. |
+| `CLAUDE_SWITCHER_SUPERVISOR` | Set by `launch` for a supervised session: the supervisor's pid. `use` and `hook stop` talk to it. |
+| `CLAUDE_SWITCHER_NO_SUPERVISE` | `1`: exec claude directly, as before 0.2.0; the session cannot switch live. |
 | `CLAUDE_SWITCHER_CLAUDE` | Path of the real claude binary (default: `claude` on PATH). |
 | `CLAUDE_SWITCHER_NO_INPUT` | Never prompt. |
 | `CLAUDE_SWITCHER_NO_UPDATE_CHECK` | No update notice, no update check in `doctor`. |

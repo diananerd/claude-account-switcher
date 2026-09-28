@@ -42,7 +42,7 @@ json="$HOME/.claude.json"; if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then json="$CLAUD
 if [ "${1:-}" = "--version" ]; then echo "9.9.9 (Claude Code)"; exit 0; fi
 if [ "${1:-}" = "--help" ]; then
   echo "CFG=${CLAUDE_CONFIG_DIR-<unset>} ACCT=${CLAUDE_SWITCHER_PROFILE-<unset>} ARGS=$*"
-  printf 'Usage: claude [options] [command] [prompt]\n\nCommands:\n  auth  Manage auth\n  update|upgrade  Update\n  mcp  MCP\n'
+  printf 'Usage: claude [options] [command] [prompt]\n\nOptions:\n  -c, --continue  Continue\n  --dangerously-skip-permissions  Bypass\n  --model <model>  Model\n  -r, --resume [value]  Resume\n\nCommands:\n  auth  Manage auth\n  update|upgrade  Update\n  mcp  MCP\n'
   exit 0
 fi
 case "${1:-} ${2:-}" in
@@ -62,7 +62,22 @@ case "${1:-} ${2:-}" in
     rm -f "$dir/.fake-login"
     t=$(mktemp); jq 'del(.oauthAccount)' "$json" > "$t" 2>/dev/null && mv "$t" "$json"
     echo "Logged out" ;;
-  *) echo "CFG=${CLAUDE_CONFIG_DIR-<unset>} ACCT=${CLAUDE_SWITCHER_PROFILE-<unset>} ARGS=$*" ;;
+  *) echo "CFG=${CLAUDE_CONFIG_DIR-<unset>} ACCT=${CLAUDE_SWITCHER_PROFILE-<unset>} ARGS=$*"
+     if [ -n "${CLAUDE_SWITCHER_SUPERVISOR:-}" ]; then echo "SUPERVISED"; fi
+     # A supervised interactive session: FAKE_TURN is what "Claude" runs in its
+     # reply, then the reply ends (Stop hook) and it waits for the user.
+     if [ -n "${FAKE_TURN:-}" ] && [ -n "${CLAUDE_SWITCHER_SUPERVISOR:-}" ]; then
+       case " $* " in
+         *" --resume "*) ;;
+         *)
+           trap 'echo "fake: got TERM"; exit 143' TERM
+           CLAUDECODE=1 eval "$FAKE_TURN"
+           echo '{"session_id":"sess-1","hook_event_name":"Stop"}' | claude-switcher hook stop
+           sleep "${FAKE_WAIT:-10}" & wait $!
+           echo "fake: stayed" ;;
+       esac
+     fi
+     exit "${FAKE_EXIT:-0}" ;;
 esac
 EOF
 chmod +x "$SANDBOX/bin/claude"
@@ -713,7 +728,91 @@ if selected integration; then
   out=$(cd "$W/sess-a" && CLAUDECODE=1 CLAUDE_SWITCHER_PROFILE=work "$CA" use client 2>&1)
   want_has "integration: remapping the session's own folder says how to switch" "resume it as client" "$out"
   "$CA" forget "$W/sess-a" >/dev/null
+  want "integration: the Stop hook is silent and harmless outside a supervised session" "0:" \
+    "$(echo '{"session_id":"x"}' | "$CA" hook stop 2>&1; echo "$?:")"
   want_has "integration: completions" "claude-switcher" "$("$CA" completions zsh | head -3)"
+fi
+
+if selected live; then
+  section "live switching (supervised sessions)"
+  L="$W/live"; mkdir -p "$L"
+  RUN="$HOME/.local/share/claude-switcher/run"
+  live() { pty_in "$L" env "$@" "$CA" launch --dangerously-skip-permissions --model opus "fix the bug" --; }
+  out=$(live FAKE_TURN="claude-switcher use client")
+  want_has "live: an interactive session is supervised" "SUPERVISED" "$out"
+  want_has "live: use from inside the session promises the move" "moves to client when Claude's reply ends" "$out"
+  want_has "live: claude is ended once the reply is over" "fake: got TERM" "$out"
+  want_has "live: the supervisor says what it does" "resuming this session as client" "$out"
+  want_has "live: the same session resumes under the new profile, options kept, prompt dropped" \
+    "ACCT=client ARGS=--dangerously-skip-permissions --model opus --resume sess-1" "$out"
+  want_has "live: the resumed claude's exit status is the launch's" "<<exit 0>>" "$out"
+  want "live: run files are removed at the end" "" "$(ls -A "$RUN" 2>/dev/null)"
+  "$CA" use work "$L" >/dev/null 2>&1
+
+  printf '#!/bin/sh\ncase "$1" in --help) exit 1 ;; esac\nexec "%s" "$@"\n' "$SANDBOX/bin/claude" > "$SANDBOX/nohelp-claude"
+  chmod +x "$SANDBOX/nohelp-claude"
+  out=$(live CLAUDE_SWITCHER_CLAUDE="$SANDBOX/nohelp-claude" FAKE_TURN="claude-switcher use client")
+  want_has "live: when claude --help cannot be read, the resume keeps no guessed arguments" \
+    "ACCT=client ARGS=--resume sess-1" "$out"
+  want_has "live: ...and says the options were not carried over" "could not read claude's options" "$out"
+  "$CA" use work "$L" >/dev/null 2>&1
+
+  out=$(live FAKE_TURN="claude-switcher use client; claude-switcher use work" FAKE_WAIT=1)
+  want_has "live: switching back before the reply ends cancels the move" "fake: stayed" "$out"
+  want_not "live: ...and claude is left alone" "resuming this session" "$out"
+  "$CA" use work "$L" >/dev/null 2>&1
+
+  out=$(live FAKE_TURN=: FAKE_WAIT=0 FAKE_EXIT=3)
+  want_has "live: claude's exit status passes through the supervisor" "<<exit 3>>" "$out"
+
+  out=$(live FAKE_TURN='kill -TERM "$CLAUDE_SWITCHER_SUPERVISOR"')
+  want_has "live: a TERM to the supervisor reaches claude" "fake: got TERM" "$out"
+  want_has "live: ...which ends the launch with claude's status" "<<exit 143>>" "$out"
+  want_not "live: ...and nothing is resumed" "resuming this session" "$out"
+
+  # Job control in a real interactive shell: Ctrl-Z suspends the session and
+  # gives the prompt back; fg resumes it.
+  out=$(cd "$L" && FAKE_TURN=: FAKE_WAIT=2 expect -f - "$CA" <<'EXP' 2>&1
+set timeout 8
+set ca [lindex $argv 0]
+spawn -noecho zsh -f -i
+send -- "PS1='zsh> '\r"
+expect "zsh> "
+send -- "$ca launch\r"
+expect "SUPERVISED"
+sleep 0.3
+send -- "\032"
+expect {
+  -re "suspended|stopped" { puts "\n<<suspended>>" }
+  timeout { puts "\n<<no suspend>>" }
+}
+expect "zsh> "
+send -- "fg\r"
+expect {
+  "fake: stayed" { puts "\n<<resumed>>" }
+  timeout { puts "\n<<not resumed>>" }
+}
+send -- "exit\r"
+expect eof
+EXP
+)
+  want_has "live: Ctrl-Z suspends the supervised session and returns the prompt" "<<suspended>>" "$out"
+  want_has "live: ...and fg resumes it" "<<resumed>>" "$out"
+
+  out=$(live CLAUDE_SWITCHER_NO_SUPERVISE=1)
+  want_not "live: CLAUDE_SWITCHER_NO_SUPERVISE=1 execs claude as before" "SUPERVISED" "$out"
+  want_not "live: print mode is never supervised" "SUPERVISED" "$(cd "$L" && "$CA" launch -p probe 2>&1)"
+  want_not "live: nor claude's own subcommands" "SUPERVISED" "$(pty_in "$L" "$CA" launch mcp list --)"
+
+  mkdir -p "$HOME/sep-cfg"; "$CA" add sep --dir "$HOME/sep-cfg" >/dev/null 2>&1
+  out=$(live FAKE_TURN="claude-switcher use sep" FAKE_WAIT=1)
+  want_has "live: a profile that keeps conversations elsewhere is not moved live" "keep their conversations in different folders" "$out"
+  want_not "live: ...and the session stays" "resuming this session" "$out"
+  "$CA" use work "$L" >/dev/null 2>&1
+  "$CA" remove sep --yes >/dev/null 2>&1
+
+  out=$(echo "{\"cwd\":\"$W/client-proj\"}" | CLAUDE_SWITCHER_PROFILE=work CLAUDE_SWITCHER_SUPERVISOR=$$ "$CA" hook session-start)
+  want_has "live: in a supervised session the hook offers the live move" "claude-switcher use client\` moves this session" "$out"
 fi
 
 if selected picker; then

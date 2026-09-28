@@ -64,8 +64,12 @@ spot.
 
 Sessions with different accounts run side by side, each in its own terminal;
 `csw run work` starts one with a given account without changing the mapping.
-A running session keeps its account: after switching, exit and run
-`claude --continue` to resume the same conversation under the new one.
+Switching the account of the folder a session runs in moves that session
+too: ask Claude to switch (`/claude-switcher:switch`) or run `csw use <account>`
+from inside it, and when Claude's reply ends the session restarts under the new
+account and carries on with the same conversation. Sessions started before
+0.2.0, or outside the shell integration, keep their account: exit and run
+`claude --continue`.
 
 Every command also works in scripts: pass everything as arguments, `-y` to
 accept confirmations, `--json` for machine-readable output.
@@ -113,7 +117,9 @@ account=$(echo "$input" | claude-switcher statusline)   # "work" or "work (here:
 
 - Only launches through your shell are routed. The desktop app and IDE
   extensions use `~/.claude` unless started from a shell with the integration.
-- A session cannot change account while running; relaunch with
+- Only sessions launched through the shell integration (0.2.0 or later) switch
+  account live, and only between accounts that share the conversation history
+  (every account `csw add` creates does). Any other session relaunches with
   `claude --continue`.
 - Logging in uses whatever claude.ai account your browser is signed in to;
   switch there (or use a private window) before `csw add` or `csw login`.

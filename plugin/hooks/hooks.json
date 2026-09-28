@@ -1,5 +1,5 @@
 {
-  "description": "Tell Claude which claude-switcher profile this session runs as, and when its directory resolves to another.",
+  "description": "Tell Claude which claude-switcher profile this session runs as, and move the session to another profile when asked, once Claude's reply ends.",
   "hooks": {
     "SessionStart": [
       {
@@ -7,6 +7,17 @@
           {
             "type": "command",
             "command": "if command -v claude-switcher >/dev/null 2>&1; then claude-switcher hook session-start; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if command -v claude-switcher >/dev/null 2>&1; then claude-switcher hook stop; fi",
             "timeout": 10
           }
         ]

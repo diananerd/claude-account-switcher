@@ -33,9 +33,22 @@ is an independent account, and all of them stay logged in at once.
 - **Your local setup on this machine**: `settings.json`, your global
   `CLAUDE.md`, skills, agents, commands, hooks, plugins, and the conversation
   history kept per folder. It is not tied to any account: every account uses
-  the same one, the way it would if you logged in and out. That is why
-  `claude --continue` resumes a conversation after you switch a project's
-  account.
+  the same one, the way it would if you logged in and out. That is why a
+  conversation carries on after you switch a project's account.
+
+## Switching a running session
+
+Claude Code reads its account once, at start. So an interactive session runs as
+a child of `claude-switcher` instead of replacing it, and `claude-switcher use`
+run from inside that session (by you or by the plugin's skill) moves it: once
+Claude's reply ends, the plugin's Stop hook tells `claude-switcher`, which ends
+claude, puts the terminal back the way it was and resumes the same session
+(`--resume <id>`, with the options it was started with, minus the prompt) under
+the new account. Switching back before the reply ends cancels the move.
+
+Ctrl-Z, signals and the exit status pass through unchanged. Print mode,
+background sessions and claude's own subcommands are not supervised; nor is
+anything launched with `CLAUDE_SWITCHER_NO_SUPERVISE=1`.
 
 ## Which account applies
 
