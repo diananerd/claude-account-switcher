@@ -513,7 +513,7 @@ pub fn note_running_session(env: &Env) {
         }
         return;
     }
-    match (run, supervise::obstacle(&cfg, &cur, &now)) {
+    match (run, supervise::obstacle(env, &cfg, &cur, &now)) {
         (Some(run), None) => match run.request_switch(&now) {
             Ok(()) => ui::hint(&format!(
                 "this session moves to {now} when Claude's reply ends: it restarts by itself and keeps the conversation"

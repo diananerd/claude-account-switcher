@@ -71,6 +71,9 @@ pub fn launch(env: &Env, args: Vec<OsString>, once: Option<String>) -> Result<Ex
     let cfg = env.load()?;
     require(&cfg, &name)?;
     let dir = cfg.config_dir(&name).map_err(|e| format!("{e}\nRun: claude-switcher doctor"))?;
+    if let Err(e) = profiles::share_sessions(env, &dir) {
+        ui::warning(&format!("{e}; sessions of other accounts will not see this one (claude-switcher doctor)"));
+    }
     if supervise::wanted(&args) {
         return supervise::run(env, name, args);
     }
@@ -162,6 +165,9 @@ pub fn statusline(env: &Env) -> Result<ExitCode> {
 /// Tells Claude (not the user) when the session runs under a different profile
 /// than the one its directory resolves to, so it can mention it once.
 pub fn hook_session_start(env: &Env) -> Result<ExitCode> {
+    if let (Some(pid), Some(root)) = (supervise::supervisor(), std::env::var_os("CLAUDE_PLUGIN_ROOT")) {
+        let _ = supervise::Run::of(env, pid).record_plugin(Path::new(&root));
+    }
     let Ok(cfg) = env.load() else { return Ok(ExitCode::SUCCESS) };
     let Some(dir) = stdin_dir(&["/cwd"]).or_else(paths::logical_cwd) else {
         return Ok(ExitCode::SUCCESS);
@@ -176,7 +182,7 @@ pub fn hook_session_start(env: &Env) -> Result<ExitCode> {
         .unwrap_or_default();
     let here = dir.display();
     match cfg.lookup(&dir) {
-        Some(hit) if hit.profile != cur && supervise::obstacle(&cfg, &cur, &hit.profile).is_none() => println!(
+        Some(hit) if hit.profile != cur && supervise::obstacle(env, &cfg, &cur, &hit.profile).is_none() => println!(
             "claude-switcher: this session runs as profile \"{cur}\"{who}, but {here} resolves to \"{}\". \
              Mention it to the user once: `claude-switcher use {}` moves this session to it \
              when your reply ends, keeping the conversation.",
@@ -206,8 +212,12 @@ pub fn hook_session_start(env: &Env) -> Result<ExitCode> {
 pub fn hook_stop(env: &Env) -> Result<ExitCode> {
     let Some(pid) = supervise::supervisor() else { return Ok(ExitCode::SUCCESS) };
     let files = supervise::Run::of(env, pid);
-    if let Some(id) = stdin_json().as_ref().and_then(|v| v.pointer("/session_id")).and_then(Value::as_str) {
+    let input = stdin_json();
+    if let Some(id) = input.as_ref().and_then(|v| v.pointer("/session_id")).and_then(Value::as_str) {
         files.record_session(id)?;
+    }
+    if let Some(path) = input.as_ref().and_then(|v| v.pointer("/transcript_path")).and_then(Value::as_str) {
+        files.record_transcript(path)?;
     }
     if files.switch_target().is_some() && files.session().is_some() {
         supervise::nudge(pid);

@@ -41,7 +41,7 @@ starts. Switching means changing the mapping, then relaunching.
 
 5. Tell the user, briefly:
    - which folder now maps to which profile;
-   - what `use` said about this session. "moves to <profile> when Claude's
+   - what `use` said about this session. "moves to PROFILE when Claude's
      reply ends": the session restarts by itself under the new profile right
      after this reply and keeps the conversation; the user does nothing.
      Otherwise ("still runs as ..."): to switch they exit (`/exit`) and run

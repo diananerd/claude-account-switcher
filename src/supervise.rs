@@ -8,17 +8,25 @@
 //! claude directly, and so does every launch with CLAUDE_SWITCHER_NO_SUPERVISE=1.
 //!
 //! The supervisor and the processes inside the session (hooks, `use`) talk
-//! through two files named after the supervisor's pid, in `<data dir>/run`:
-//! `<pid>.session` (the session id, written by the Stop hook) and `<pid>.switch`
-//! (the profile to move to, written by `use`), plus SIGUSR1 to say "look now".
+//! through files named after the supervisor's pid, in `<data dir>/run`:
+//! `<pid>.session` and `<pid>.transcript` (the session id, and where its
+//! transcript was when the reply ended, written by the Stop hook) and
+//! `<pid>.switch` (the profile to move to, written by `use`), plus SIGUSR1 to
+//! say "look now".
+//!
+//! Claude runs its Stop hooks in parallel, so the nudge comes while the others
+//! may still run. The supervisor ends claude only once the transcript says the
+//! turn is over (a `turn_duration` entry, written after every Stop hook, and not
+//! when one keeps Claude working).
 
 use libc::{c_int, pid_t};
 use std::ffi::OsString;
-use std::io::{IsTerminal, Write};
+use std::io::{IsTerminal, Read, Seek, SeekFrom, Write};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use crate::claude;
 use crate::state::{Config, Env, Result};
@@ -28,7 +36,14 @@ pub const SUPERVISOR_VAR: &str = "CLAUDE_SWITCHER_SUPERVISOR";
 const OPT_OUT_VAR: &str = "CLAUDE_SWITCHER_NO_SUPERVISE";
 
 /// How long claude gets to exit after SIGTERM before SIGKILL.
-const GRACE_SECS: u32 = 5;
+const GRACE: Duration = Duration::from_secs(5);
+
+/// How long a pending move waits on a transcript that stopped growing without
+/// saying the turn is over (a hung hook, a Claude Code that does not write it).
+const QUIET_CAP: Duration = Duration::from_secs(90);
+
+/// How often a pending move looks at the transcript.
+const TICK: Duration = Duration::from_millis(200);
 
 /// Whether this launch should be supervised: an interactive session in a
 /// terminal. Print mode, background sessions, --help/--version and claude's own
@@ -84,13 +99,20 @@ fn install_handlers() {
 /// The run files of one supervisor.
 pub struct Run {
     session: PathBuf,
+    transcript: PathBuf,
     switch: PathBuf,
+    plugin: PathBuf,
 }
 
 impl Run {
     pub fn of(env: &Env, pid: u32) -> Run {
         let dir = env.data_dir.join("run");
-        Run { session: dir.join(format!("{pid}.session")), switch: dir.join(format!("{pid}.switch")) }
+        Run {
+            session: dir.join(format!("{pid}.session")),
+            transcript: dir.join(format!("{pid}.transcript")),
+            switch: dir.join(format!("{pid}.switch")),
+            plugin: dir.join(format!("{pid}.plugin")),
+        }
     }
 
     fn write(path: &Path, text: &str) -> Result<()> {
@@ -114,6 +136,29 @@ impl Run {
     pub fn record_session(&self, id: &str) -> Result<()> {
         Run::write(&self.session, id)
     }
+    /// Remember the transcript and its current length: the turn's end is
+    /// written after this point, once every Stop hook is done.
+    pub fn record_transcript(&self, path: &str) -> Result<()> {
+        let len = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        Run::write(&self.transcript, &format!("{len}\t{path}"))
+    }
+    fn transcript(&self) -> Option<(u64, PathBuf)> {
+        let text = Run::read(&self.transcript)?;
+        let (len, path) = text.split_once('\t')?;
+        Some((len.parse().ok()?, PathBuf::from(path)))
+    }
+    /// Remember which claude-switcher plugin the session loaded (its SessionStart
+    /// hook runs in every version, the Stop hook only from 0.2).
+    /// With two copies loaded, one that has the Stop hook wins.
+    pub fn record_plugin(&self, root: &Path) -> Result<()> {
+        if !has_stop_hook(root) && self.plugin().is_some_and(|p| has_stop_hook(&p)) {
+            return Ok(());
+        }
+        Run::write(&self.plugin, &root.to_string_lossy())
+    }
+    fn plugin(&self) -> Option<PathBuf> {
+        Run::read(&self.plugin).map(PathBuf::from)
+    }
     pub fn switch_target(&self) -> Option<String> {
         Run::read(&self.switch)
     }
@@ -125,6 +170,8 @@ impl Run {
     }
     fn clear(&self) {
         let _ = std::fs::remove_file(&self.session);
+        let _ = std::fs::remove_file(&self.transcript);
+        let _ = std::fs::remove_file(&self.plugin);
         let _ = std::fs::remove_file(&self.switch);
     }
 }
@@ -136,9 +183,22 @@ pub fn supervisor() -> Option<u32> {
 }
 
 /// Why a session cannot move from `from` to `to` live, if it cannot.
-pub fn obstacle(cfg: &Config, from: &str, to: &str) -> Option<String> {
-    if supervisor().is_none() {
+pub fn obstacle(env: &Env, cfg: &Config, from: &str, to: &str) -> Option<String> {
+    let Some(pid) = supervisor() else {
         return Some("this session was not started by claude-switcher 0.2 or later".into());
+    };
+    // The plugin's Stop hook is what tells the supervisor the reply is over.
+    match Run::of(env, pid).plugin() {
+        None => return Some("the claude-switcher plugin is not loaded in this session".into()),
+        Some(root) if !has_stop_hook(&root) => {
+            return Some(
+                "the claude-switcher plugin in this session is older than 0.2; update it in Claude Code with \
+                 /plugin marketplace update claude-account-switcher, then \
+                 /plugin update claude-switcher@claude-account-switcher"
+                    .into(),
+            );
+        }
+        Some(_) => {}
     }
     // `--resume` finds the conversation only where the new profile keeps its own.
     let projects = |p: &str| cfg.config_dir(p).ok().and_then(|d| crate::paths::canonical(&d.join("projects")));
@@ -146,6 +206,13 @@ pub fn obstacle(cfg: &Config, from: &str, to: &str) -> Option<String> {
         (Some(a), Some(b)) if a == b => None,
         _ => Some(format!("{from} and {to} keep their conversations in different folders")),
     }
+}
+
+fn has_stop_hook(plugin_root: &Path) -> bool {
+    std::fs::read_to_string(plugin_root.join("hooks/hooks.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .is_some_and(|v| v.pointer("/hooks/Stop").is_some())
 }
 
 /// Tell the supervisor to look at its run files now.
@@ -234,7 +301,8 @@ pub fn run(env: &Env, mut name: String, mut args: Vec<OsString>) -> Result<ExitC
 /// Wait for claude to end, passing on stops and termination requests. Returns
 /// its wait status and whether it ended because this supervisor moved it.
 fn wait(pid: pid_t, files: &Run) -> (c_int, bool) {
-    let mut moving = false;
+    let mut drain: Option<Drain> = None;
+    let mut kill_at: Option<Instant> = None;
     loop {
         let mut status: c_int = 0;
         let r = unsafe { libc::waitpid(pid, &mut status, libc::WUNTRACED) };
@@ -248,10 +316,12 @@ fn wait(pid: pid_t, files: &Run) -> (c_int, bool) {
                 }
                 continue;
             }
-            return (status, moving);
+            ticker(false);
+            return (status, kill_at.is_some());
         }
         if r == -1 && std::io::Error::last_os_error().raw_os_error() != Some(libc::EINTR) {
-            return (status, moving);
+            ticker(false);
+            return (status, kill_at.is_some());
         }
         let bits = CAUGHT.swap(0, Ordering::SeqCst);
         for sig in [libc::SIGTERM, libc::SIGHUP] {
@@ -261,18 +331,89 @@ fn wait(pid: pid_t, files: &Run) -> (c_int, bool) {
                 }
             }
         }
-        if caught(bits, libc::SIGUSR1) && !moving && files.switch_target().is_some() && files.session().is_some() {
-            moving = true;
-            unsafe {
-                libc::kill(pid, libc::SIGTERM);
-                libc::alarm(GRACE_SECS);
+        if caught(bits, libc::SIGUSR1)
+            && drain.is_none()
+            && kill_at.is_none()
+            && files.switch_target().is_some()
+            && files.session().is_some()
+        {
+            drain = Some(Drain::start(files.transcript()));
+            ticker(true);
+        }
+        if let Some(d) = &mut drain {
+            if files.switch_target().is_none() {
+                // Switched back while the other hooks ran: stay.
+                drain = None;
+                ticker(false);
+            } else if d.turn_over() {
+                drain = None;
+                kill_at = Some(Instant::now() + GRACE);
+                unsafe {
+                    libc::kill(pid, libc::SIGTERM);
+                }
             }
         }
-        if caught(bits, libc::SIGALRM) && moving {
+        if kill_at.is_some_and(|t| Instant::now() >= t) {
             unsafe {
                 libc::kill(pid, libc::SIGKILL);
             }
         }
+    }
+}
+
+/// A move waiting for Claude's turn to be over.
+struct Drain {
+    /// The transcript and how far it was when the reply ended.
+    transcript: Option<(u64, PathBuf)>,
+    len: u64,
+    changed: Instant,
+}
+
+impl Drain {
+    fn start(transcript: Option<(u64, PathBuf)>) -> Drain {
+        let len = transcript.as_ref().map_or(0, |t| t.0);
+        Drain { transcript, len, changed: Instant::now() }
+    }
+
+    /// Whether claude can be ended now: the transcript says the turn is over,
+    /// or has been quiet for too long, or there is no transcript to watch.
+    fn turn_over(&mut self) -> bool {
+        let Some((from, path)) = &self.transcript else { return true };
+        let Ok(tail) = read_from(path, *from) else { return true };
+        let ended = tail.lines().filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok()).any(|v| {
+            v.get("type").and_then(|t| t.as_str()) == Some("system")
+                && v.get("subtype").and_then(|t| t.as_str()) == Some("turn_duration")
+        });
+        if ended {
+            return true;
+        }
+        let len = from + tail.len() as u64;
+        if len != self.len {
+            self.len = len;
+            self.changed = Instant::now();
+        }
+        self.changed.elapsed() >= QUIET_CAP
+    }
+}
+
+fn read_from(path: &Path, from: u64) -> std::io::Result<String> {
+    let mut f = std::fs::File::open(path)?;
+    f.seek(SeekFrom::Start(from))?;
+    let mut bytes = Vec::new();
+    f.read_to_end(&mut bytes)?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// SIGALRM every TICK while a move is pending, so waitpid wakes to look.
+fn ticker(on: bool) {
+    let every = if on {
+        libc::timeval { tv_sec: 0, tv_usec: TICK.as_micros() as libc::suseconds_t }
+    } else {
+        libc::timeval { tv_sec: 0, tv_usec: 0 }
+    };
+    let t = libc::itimerval { it_interval: every, it_value: every };
+    unsafe {
+        libc::setitimer(libc::ITIMER_REAL, &t, std::ptr::null_mut());
     }
 }
 

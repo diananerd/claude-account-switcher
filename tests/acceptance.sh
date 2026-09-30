@@ -71,8 +71,22 @@ case "${1:-} ${2:-}" in
          *" --resume "*) ;;
          *)
            trap 'echo "fake: got TERM"; exit 143' TERM
+           # Claude Code runs the plugin's SessionStart hook with its root set.
+           if [ -n "${FAKE_PLUGIN_ROOT:-}" ]; then
+             CLAUDE_PLUGIN_ROOT="$FAKE_PLUGIN_ROOT" claude-switcher hook session-start </dev/null >/dev/null 2>&1
+           fi
            CLAUDECODE=1 eval "$FAKE_TURN"
-           echo '{"session_id":"sess-1","hook_event_name":"Stop"}' | claude-switcher hook stop
+           if [ -n "${FAKE_TRANSCRIPT:-}" ]; then
+             # The real shape: the transcript path in the hook input, other
+             # Stop hooks still running, then the turn's end written.
+             echo '{"type":"assistant"}' > "$FAKE_TRANSCRIPT"
+             printf '{"session_id":"sess-1","transcript_path":"%s","hook_event_name":"Stop"}' "$FAKE_TRANSCRIPT" \
+               | claude-switcher hook stop
+             sleep "${FAKE_HOOKS:-1}"; echo "fake: other hooks done"
+             echo '{"type":"system","subtype":"turn_duration","durationMs":1}' >> "$FAKE_TRANSCRIPT"
+           else
+             echo '{"session_id":"sess-1","hook_event_name":"Stop"}' | claude-switcher hook stop
+           fi
            sleep "${FAKE_WAIT:-10}" & wait $!
            echo "fake: stayed" ;;
        esac
@@ -106,6 +120,13 @@ skip() { SKIP=$((SKIP + 1)); printf '  skip  %s (%s)\n' "$1" "$2"; }
 want() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "expected: $2 | got: $3"; fi; }
 want_has() { case "$3" in *"$2"*) ok "$1" ;; *) bad "$1" "missing: $2 | got: $3" ;; esac; }
 want_not() { case "$3" in *"$2"*) bad "$1" "unexpected: $2 | got: $3" ;; *) ok "$1" ;; esac; }
+# want_order name first second haystack: both appear, first before second.
+want_order() {
+  case "$4" in
+    *"$2"*"$3"*) ok "$1" ;;
+    *) bad "$1" "want \"$2\" before \"$3\" | got: $4" ;;
+  esac
+}
 fails() { if "${@:2}" >/dev/null 2>&1; then bad "$1" "succeeded"; else ok "$1"; fi; }
 selected() { [ -z "$FILTER" ] || case "$1" in *"$FILTER"*) return 0 ;; *) return 1 ;; esac; }
 section() { printf '\n%s\n' "$1"; }
@@ -205,6 +226,17 @@ if selected profiles; then
   want "profiles: managed dir is private" "drwx------" "$(ls -ld "$CLIENT_DIR" | cut -c1-10)"
   want "profiles: config.toml is private" "-rw-------" "$(ls -l "$CONFIG" | cut -c1-10)"
   want "profiles: shared settings.json links to the base" "$HOME/.claude/settings.json" "$(readlink "$CLIENT_DIR/settings.json")"
+  want "profiles: the running-session registry is shared too" "$HOME/.claude/sessions" "$(readlink "$CLIENT_DIR/sessions")"
+  # An account dir from before 0.2 has its own sessions/: launching merges it.
+  rm "$CLIENT_DIR/sessions"; mkdir "$CLIENT_DIR/sessions"; echo '{"pid":1}' > "$CLIENT_DIR/sessions/424242.json"
+  launch_in "$W/client-proj" >/dev/null
+  want "profiles: launch replaces an old sessions/ with the shared link" "$HOME/.claude/sessions" "$(readlink "$CLIENT_DIR/sessions")"
+  want "profiles: ...keeping the entries it held" '{"pid":1}' "$(cat "$HOME/.claude/sessions/424242.json" 2>&1)"
+  rm -f "$HOME/.claude/sessions/424242.json"
+  rm "$CLIENT_DIR/sessions"; mkdir "$CLIENT_DIR/sessions"
+  want_has "profiles: doctor offers to share an old sessions/" "sessions" "$("$CA" doctor 2>&1 | grep -i 'client')"
+  "$CA" doctor --fix >/dev/null 2>&1
+  want "profiles: doctor --fix shares it" "$HOME/.claude/sessions" "$(readlink "$CLIENT_DIR/sessions")"
   want "profiles: missing shared dirs are created in the base and linked" "$HOME/.claude/agents" "$(readlink "$CLIENT_DIR/agents")"
   for n in Upper list -dash 'a b' '' setup "$(printf 'x%.0s' $(seq 41))"; do
     fails "profiles: rejects name \"${n:0:12}\"" "$CA" add "$n" --no-login
@@ -737,6 +769,7 @@ if selected live; then
   section "live switching (supervised sessions)"
   L="$W/live"; mkdir -p "$L"
   RUN="$HOME/.local/share/claude-switcher/run"
+  export FAKE_PLUGIN_ROOT="$REPO/plugin"
   live() { pty_in "$L" env "$@" "$CA" launch --dangerously-skip-permissions --model opus "fix the bug" --; }
   out=$(live FAKE_TURN="claude-switcher use client")
   want_has "live: an interactive session is supervised" "SUPERVISED" "$out"
@@ -755,6 +788,18 @@ if selected live; then
   want_has "live: when claude --help cannot be read, the resume keeps no guessed arguments" \
     "ACCT=client ARGS=--resume sess-1" "$out"
   want_has "live: ...and says the options were not carried over" "could not read claude's options" "$out"
+  "$CA" use work "$L" >/dev/null 2>&1
+
+  out=$(live FAKE_TURN="claude-switcher use client" FAKE_TRANSCRIPT="$L/transcript.jsonl")
+  want_order "live: claude is ended only after every Stop hook, once the turn is over" \
+    "fake: other hooks done" "fake: got TERM" "$out"
+  want_has "live: ...and resumed under the new profile" "ACCT=client ARGS=--dangerously-skip-permissions --model opus --resume sess-1" "$out"
+  "$CA" use work "$L" >/dev/null 2>&1
+
+  out=$(live FAKE_TURN="claude-switcher use client; (sleep 0.5; claude-switcher use work) &" \
+    FAKE_TRANSCRIPT="$L/transcript.jsonl" FAKE_WAIT=1)
+  want_not "live: switching back while the other Stop hooks run cancels the move" "resuming this session" "$out"
+  want_has "live: ...and claude is left alone" "fake: stayed" "$out"
   "$CA" use work "$L" >/dev/null 2>&1
 
   out=$(live FAKE_TURN="claude-switcher use client; claude-switcher use work" FAKE_WAIT=1)
@@ -811,7 +856,20 @@ EXP
   "$CA" use work "$L" >/dev/null 2>&1
   "$CA" remove sep --yes >/dev/null 2>&1
 
-  out=$(echo "{\"cwd\":\"$W/client-proj\"}" | CLAUDE_SWITCHER_PROFILE=work CLAUDE_SWITCHER_SUPERVISOR=$$ "$CA" hook session-start)
+  # A plugin from before 0.2 has no Stop hook: nothing would say the reply ended.
+  OLDPLUGIN="$W/old-plugin"; mkdir -p "$OLDPLUGIN/hooks"
+  echo '{"hooks":{"SessionStart":[]}}' > "$OLDPLUGIN/hooks/hooks.json"
+  out=$(live FAKE_TURN="claude-switcher use client" FAKE_PLUGIN_ROOT="$OLDPLUGIN" FAKE_WAIT=1)
+  want_has "live: with a plugin older than 0.2, use says to update it" "plugin in this session is older than 0.2" "$out"
+  want_not "live: ...and does not promise the move" "moves to client" "$out"
+  want_not "live: ...nor moves it" "resuming this session" "$out"
+  "$CA" use work "$L" >/dev/null 2>&1
+  out=$(live FAKE_TURN="claude-switcher use client" FAKE_PLUGIN_ROOT= FAKE_WAIT=1)
+  want_has "live: without the plugin, use says it is not loaded" "plugin is not loaded in this session" "$out"
+  want_not "live: ...and does not move it" "resuming this session" "$out"
+  "$CA" use work "$L" >/dev/null 2>&1
+
+  out=$(echo "{\"cwd\":\"$W/client-proj\"}" | CLAUDE_PLUGIN_ROOT="$REPO/plugin" CLAUDE_SWITCHER_PROFILE=work CLAUDE_SWITCHER_SUPERVISOR=$$ "$CA" hook session-start)
   want_has "live: in a supervised session the hook offers the live move" "claude-switcher use client\` moves this session" "$out"
 fi
 

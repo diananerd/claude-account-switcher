@@ -14,7 +14,15 @@ All notable changes to this project are documented here. The format follows
   conversation, with the options it was started with. Interactive sessions now
   run as a child of `claude-switcher`; Ctrl-Z, signals and the exit status pass
   through. `CLAUDE_SWITCHER_NO_SUPERVISE=1` turns it off.
-- `hook stop`, and a Stop hook in the plugin that calls it.
+- `hook stop`, and a Stop hook in the plugin that calls it. The move waits until
+  Claude Code records that the turn is over, so every other Stop hook finishes
+  first, and none that keeps Claude working is cut short.
+- `use` inside a session whose claude-switcher plugin is missing or older than
+  0.2.0 says so, with the commands to update it, instead of promising a move
+  that would never happen.
+- Sessions of every account see and can message each other: `sessions/`, Claude
+  Code's list of running sessions, is shared like `projects/`. Account dirs
+  from before 0.2.0 are migrated at their next launch.
 
 ## [0.1.4] - 2026-09-28
 

@@ -46,6 +46,18 @@ claude, puts the terminal back the way it was and resumes the same session
 (`--resume <id>`, with the options it was started with, minus the prompt) under
 the new account. Switching back before the reply ends cancels the move.
 
+Claude Code runs Stop hooks in parallel, so `claude-switcher` does not end
+claude when its own hook fires: it waits until the transcript records that the
+turn is over, which Claude Code writes after every Stop hook has finished and
+not while a hook keeps Claude working. Your other Stop hooks always complete.
+
+The move needs the plugin at 0.2.0 or later, whose Stop hook says when the reply
+ends. With an older plugin, or none, `use` says so and the session keeps its
+account until you relaunch it. The plugin is installed once for every account
+(they share `plugins/`); update it in Claude Code with
+`/plugin marketplace update claude-account-switcher`, then
+`/plugin update claude-switcher@claude-account-switcher`.
+
 Ctrl-Z, signals and the exit status pass through unchanged. Print mode,
 background sessions and claude's own subcommands are not supervised; nor is
 anything launched with `CLAUDE_SWITCHER_NO_SUPERVISE=1`.

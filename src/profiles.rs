@@ -15,8 +15,18 @@ use crate::{aborted, claude, paths, require, ui, valid_name};
 /// another account. Everything else stays per account: credentials,
 /// `.claude.json` (identity, per-project trust), caches, daemon, jobs. Files
 /// settings reference by absolute path need no link.
-pub const SHARED_DIRS: &[&str] =
-    &["skills", "agents", "commands", "output-styles", "hooks", "plugins", "projects", "plans", "file-history"];
+pub const SHARED_DIRS: &[&str] = &[
+    "skills",
+    "agents",
+    "commands",
+    "output-styles",
+    "hooks",
+    "plugins",
+    "projects",
+    "plans",
+    "file-history",
+    "sessions",
+];
 pub const SHARED_FILES: &[&str] = &["CLAUDE.md", "settings.json", "keybindings.json", "history.jsonl"];
 /// Keys copied once from the base `.claude.json` into a new account so it does
 /// not start from scratch: onboarding done, user-scope MCP servers, project trust.
@@ -344,11 +354,49 @@ pub fn link_shared(env: &Env, acct: &Path) -> Result<Vec<PathBuf>> {
                     symlink(&src, &dst).map_err(|err| format!("cannot link {e}: {err}"))?;
                 }
             }
+            Ok(m) if *e == "sessions" && m.is_dir() => {
+                adopt_sessions(&src, &dst).map_err(|err| format!("cannot share sessions: {err}"))?
+            }
             Ok(_) => conflicts.push(dst),
             Err(_) => symlink(&src, &dst).map_err(|err| format!("cannot link {e}: {err}"))?,
         }
     }
     Ok(conflicts)
+}
+
+/// `sessions/` is Claude Code's registry of running sessions (what `ListAgents`
+/// lists and `SendMessage` reaches). It only holds entries of live sessions, so
+/// an account's own one, from before 0.2, is merged into the shared one and
+/// replaced by a link, also while sessions run: they keep writing by path.
+fn adopt_sessions(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(src)?;
+    for entry in std::fs::read_dir(dst)? {
+        let entry = entry?;
+        let to = src.join(entry.file_name());
+        if !to.exists() {
+            std::fs::rename(entry.path(), to)?;
+        }
+    }
+    std::fs::remove_dir_all(dst)?;
+    symlink(src, dst)
+}
+
+/// Share `sessions/` in an account dir that shares the rest (its `projects`
+/// links to the base), so every account's sessions see each other. Run at each
+/// launch: a no-op once linked, a migration for account dirs made before 0.2.
+pub fn share_sessions(env: &Env, acct: &Path) -> Result<()> {
+    let base_projects = env.base_dir.join("projects");
+    if std::fs::read_link(acct.join("projects")).ok().as_deref() != Some(base_projects.as_path()) {
+        return Ok(());
+    }
+    let src = env.base_dir.join("sessions");
+    let dst = acct.join("sessions");
+    let r = match std::fs::symlink_metadata(&dst) {
+        Ok(m) if m.is_dir() => adopt_sessions(&src, &dst),
+        Ok(_) => return Ok(()),
+        Err(_) => std::fs::create_dir_all(&src).and_then(|_| symlink(&src, &dst)),
+    };
+    r.map_err(|e| format!("cannot share sessions: {e}"))
 }
 
 // ------------------------------------------------------------------ login / logout
@@ -643,6 +691,8 @@ pub fn link_shared_dry(env: &Env, acct: &Path) -> LinkState {
         }
         match std::fs::symlink_metadata(acct.join(e)) {
             Ok(m) if m.file_type().is_symlink() && acct.join(e).exists() => {}
+            // A real sessions/ is fixable: it is merged into the shared one.
+            Ok(m) if *e == "sessions" && m.is_dir() => s.missing.push(e.to_string()),
             Ok(m) if !m.file_type().is_symlink() => s.conflicts.push(e.to_string()),
             _ => s.missing.push(e.to_string()),
         }

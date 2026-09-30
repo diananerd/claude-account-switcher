@@ -87,9 +87,11 @@ Each command shows what it will do and asks first; `-y` skips the question.
 
 ## Claude Code plugin
 
-Optional. Tells Claude which account each session runs as, and when that is
-not the folder's, and lets Claude show or switch the project's account
-(`/claude-switcher:switch`).
+Tells Claude which account each session runs as, and when that is not the
+folder's, and lets Claude show or switch the project's account
+(`/claude-switcher:switch`). Moving a running session to another account needs
+it (0.2.0 or later); everything else works without it. One install serves every
+account.
 
 ```text
 /plugin marketplace add diananerd/claude-account-switcher
